@@ -439,7 +439,8 @@ def draw_countdown_frame(p1, p2, label, starting_time):
     screen.blit(bg, (0, 0))
     p1.draw(screen)
     p2.draw(screen)
-    draw_ui(p1, p2, starting_time, countdown_text=label)
+    # Show the full round timer value while overlaying the countdown text.
+    draw_ui(p1, p2, starting_time, countdown_text=None)
 
     overlay = render_pixel_text(label, WHITE, 5)
     outline = overlay.copy()
@@ -458,14 +459,13 @@ def run_round_countdown(p1, p2, starting_time):
         target_ms = 800 if label == "GO" else 1000
         elapsed = 0
         while elapsed < target_ms:
-            draw_countdown_frame(p1, p2, label, starting_time)
-
             for e in pygame.event.get():
                 if e.type == pygame.QUIT:
                     sys.exit()
                 if e.type == pygame.KEYDOWN and e.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
                     return
 
+            draw_countdown_frame(p1, p2, label, starting_time)
             elapsed += clock.tick(60)
 
 # ----------------------------------------------------------
@@ -586,6 +586,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
