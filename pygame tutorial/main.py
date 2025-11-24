@@ -1,7 +1,7 @@
 import pygame
 import sys
 import os
-import math
+
 
 pygame.init()
 
@@ -200,8 +200,8 @@ class Fighter:
             self.on_ground = True
 
         # attacks
-        if self.attack_cool > 0:
-            self.attack_cool -= 1
+            if self.attack_cool > 0:
+                self.attack_cool -= 1
         if self.proj_cool > 0:
             self.proj_cool -= 1
 
@@ -285,19 +285,57 @@ def create_players():
 # DRAW UI (HEALTH + TIMER)
 # ----------------------------------------------------------
 def draw_ui(p1, p2, time_left):
-    bar_w = 300
-    bar_h = 20
+    bar_w = 320
+    bar_h = 22
 
-    # P1
-    pygame.draw.rect(screen, RED,   (20, 20, bar_w, bar_h))
-    pygame.draw.rect(screen, GREEN, (20, 20, bar_w * (p1.health/100), bar_h))
+    def draw_bar(x, y, ratio, label):
+        ratio = max(0, min(1, ratio))
+        base_rect = pygame.Rect(x, y, bar_w, bar_h)
+        panel_rect = base_rect.inflate(14, 12)
 
-    # P2
-    pygame.draw.rect(screen, RED,   (WIDTH-20-bar_w, 20, bar_w, bar_h))
-    pygame.draw.rect(screen, GREEN, (WIDTH-20-bar_w, 20, bar_w * (p2.health/100), bar_h))
+        shadow = panel_rect.move(3, 3)
+        pygame.draw.rect(screen, (0, 0, 0), shadow, border_radius=10)
+
+        pygame.draw.rect(screen, (26, 26, 40), panel_rect, border_radius=10)
+        pygame.draw.rect(screen, (90, 90, 120), panel_rect, width=2, border_radius=10)
+
+        track_rect = base_rect.inflate(8, 6)
+        pygame.draw.rect(screen, (40, 40, 60), track_rect, border_radius=8)
+
+        # Health color transitions from red -> amber -> green
+        if ratio > 0.6:
+            fill_color = (40, 200, 120)
+        elif ratio > 0.3:
+            fill_color = (240, 170, 60)
+        else:
+            fill_color = (210, 60, 60)
+
+        fill_rect = pygame.Rect(base_rect.x, base_rect.y, int(bar_w * ratio), bar_h)
+        pygame.draw.rect(screen, fill_color, fill_rect, border_radius=6)
+        highlight = pygame.Rect(fill_rect.x + 4, fill_rect.y + 3, max(0, fill_rect.w - 8), 6)
+        pygame.draw.rect(screen, (255, 255, 255), highlight, border_radius=4)
+
+        label_surface = ui_font.render(label, True, WHITE)
+        label_pos = label_surface.get_rect(midleft=(panel_rect.x + 10, panel_rect.centery))
+        screen.blit(label_surface, label_pos)
+
+    draw_bar(18, 18, p1.health / 100, f"P1 {p1.health:03d}")
+    draw_bar(WIDTH - bar_w - 18, 18, p2.health / 100, f"P2 {p2.health:03d}")
+
+    # Timer panel
+    timer_rect = pygame.Rect(WIDTH // 2 - 70, 12, 140, 48)
+    timer_shadow = timer_rect.move(3, 3)
+    pygame.draw.rect(screen, (0, 0, 0), timer_shadow, border_radius=10)
+    pygame.draw.rect(screen, (24, 32, 60), timer_rect, border_radius=10)
+    pygame.draw.rect(screen, (110, 140, 200), timer_rect, width=2, border_radius=10)
+
+    label = ui_font.render("TIME", True, WHITE)
+    label_pos = label.get_rect(midtop=(timer_rect.centerx, timer_rect.y + 4))
+    screen.blit(label, label_pos)
 
     timer_text = timer_font.render(str(time_left), True, WHITE)
-    screen.blit(timer_text, (WIDTH//2 - timer_text.get_width()//2, 15))
+    text_pos = timer_text.get_rect(center=(timer_rect.centerx, timer_rect.y + timer_rect.h - 22))
+    screen.blit(timer_text, text_pos)
 
 
 # ----------------------------------------------------------
@@ -308,6 +346,7 @@ def draw_ui(p1, p2, time_left):
 menu_font = pygame.font.Font(None, 80)
 timer_font = pygame.font.Font(None, 60)
 controls_font = pygame.font.Font(None, 36)
+ui_font = pygame.font.Font(None, 28)
 
 menu_title = menu_font.render("Big Boy Simulator", True, WHITE)
 start_prompt = timer_font.render("Press ENTER to start", True, WHITE)
@@ -474,5 +513,6 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
