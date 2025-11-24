@@ -381,7 +381,7 @@ controls_font = pygame.font.Font(None, 36)
 ui_font = pygame.font.Font(None, 28)
 
 menu_title = menu_font.render("Big Boy Simulator", True, WHITE)
-start_prompt = timer_font.render("Press ENTER to start", True, WHITE)
+start_prompt = timer_font.render("Press ENTER (or NUMPAD ENTER) to start", True, WHITE)
 p1_controls = [
     controls_font.render("Player 1: Move A/D, Jump W", True, WHITE),
     controls_font.render("Melee: SPACE  |  Throw: Q", True, WHITE)
@@ -416,7 +416,7 @@ def main_menu():
                 pygame.quit()
                 sys.exit()
 
-            if e.type == pygame.KEYDOWN and e.key == pygame.K_RETURN:
+            if e.type == pygame.KEYDOWN and e.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
                 return
 
         screen.blit(menu_bg, (0, 0))
@@ -640,6 +640,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
