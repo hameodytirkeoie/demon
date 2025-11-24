@@ -21,8 +21,8 @@ SPRITE_W, SPRITE_H = 50, 80
 GROUND_Y = HEIGHT - 40
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-assets_dir = os.path.join(BASE_DIR, "assets")
-BASE_P1 = os.path.join(assets_dir, "player1")
+project_root = os.path.abspath(os.path.join(BASE_DIR, os.pardir))
+assets_dir = os.path.join(project_root, "assets")
 BASE_P2 = os.path.join(assets_dir, "player2")
 
 # ----------------------------------------------------------
@@ -498,12 +498,9 @@ def game_loop():
 
 
 # ----------------------------------------------------------
-# START GAME
+# NOTE: This module contains tests and helper functions. It should not
+# start the interactive game loop when executed directly.
 # ----------------------------------------------------------
-if __name__ == "__main__":
-    game_loop()
-    pygame.quit()
-    sys.exit()
 +39
 -0
 
@@ -609,3 +606,4 @@ def test_bottle_hit_and_shatter(monkeypatch):
 
 
     pygame.quit()
+
