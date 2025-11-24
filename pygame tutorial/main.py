@@ -141,7 +141,7 @@ class Fighter:
 
         self.x = x
         self.melee_key = melee_key
-        self.proj = proj_key
+        self.proj_key = proj_key
 
         self.health = 100
         self.velocity = 5
@@ -234,7 +234,7 @@ class Fighter:
                 opponent.health -= 10
                 opponent.set_hit()
 
-        elif self.proj and keys[self.proj] and self.attack_cool == 0 and self.proj_cool == 0:
+        elif self.proj_key and keys[self.proj_key] and self.attack_cool == 0 and self.proj_cool == 0:
             self.attack_cool = 20
             self.proj_cool = 60  # ~1 second cooldown at 60 FPS
             self.state = "attack"
@@ -469,21 +469,23 @@ def run_round_countdown(p1, p2, starting_time):
             elapsed += clock.tick(60)
 
 
+# ----------------------------------------------------------
+# ROUND MESSAGES
+# ----------------------------------------------------------
 def show_round_message(title, subtitle=None, duration_ms=1400):
     """Overlay a simple, centered message for a short duration."""
-def play_round(p1, p2):
-    time_left = 60
-    timer_label = str(time_left)
-    tick = 0
-    projectiles = []
-    bottles = []
-    overtime = False
-    sudden_death = False
 
-    run_round_countdown(p1, p2, time_left)
+    title_surf = render_pixel_text(title, WHITE, 4)
+    title_rect = title_surf.get_rect(center=(WIDTH // 2, HEIGHT // 2 - 10))
 
-    while True:
+    elapsed = 0
+    while elapsed < duration_ms:
+        for e in pygame.event.get():
+            if e.type == pygame.QUIT:
+                sys.exit()
+
         screen.blit(bg, (0, 0))
+
         outline = title_surf.copy()
         outline.fill((0, 0, 0), special_flags=pygame.BLEND_RGBA_MULT)
         outline_rect = title_rect.move(4, 4)
@@ -504,9 +506,12 @@ def play_round(p1, p2):
 # ----------------------------------------------------------
 def play_round(p1, p2):
     time_left = 60
+    timer_label = str(time_left)
     tick = 0
     projectiles = []
     bottles = []
+    overtime = False
+    sudden_death = False
 
     run_round_countdown(p1, p2, time_left)
 
@@ -640,6 +645,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
