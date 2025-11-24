@@ -150,6 +150,7 @@ class Fighter:
         self.on_ground = True
 
         self.attack_cool = 0
+        self.proj_cool = 0
         self.just_shot = False
         self.hit_timer = 0
         self.win_timer = 0
@@ -201,6 +202,8 @@ class Fighter:
         # attacks
         if self.attack_cool > 0:
             self.attack_cool -= 1
+        if self.proj_cool > 0:
+            self.proj_cool -= 1
 
         if keys[self.me] and self.attack_cool == 0:
             self.attack_cool = 18
@@ -209,11 +212,11 @@ class Fighter:
                 opponent.health -= 10
                 opponent.set_hit()
 
-        elif self.proj and keys[self.proj] and self.attack_cool == 0:
+        elif self.proj and keys[self.proj] and self.attack_cool == 0 and self.proj_cool == 0:
             self.attack_cool = 20
+            self.proj_cool = 60  # ~1 second cooldown at 60 FPS
             self.state = "attack"
             self.just_shot = True
-
         else:
             if moving:
                 self.state = "walk"
@@ -471,4 +474,5 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
