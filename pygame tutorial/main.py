@@ -6,7 +6,7 @@ pygame.init()
 
 # --- Screen ---
 WIDTH, HEIGHT = 800, 400
-screen = pygame.display.set_mode(WIDTH, HEIGHT)
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Big Boy Simulator")
 clock = pygame.time.Clock()
 
@@ -425,10 +425,13 @@ def main_menu():
         pygame.display.flip()
         clock.tick(60)
 
-        for e in pygame.event.get():
-            if e.type == pygame.QUIT: sys.exit()
-                if e.type == pygame.KEYDOWN and e.key == pygame.K_RETURN:
-                return
+for e in pygame.event.get():
+    if e.type == pygame.QUIT:
+        sys.exit()
+
+    if e.type == pygame.KEYDOWN and e.key == pygame.K_RETURN:
+        break
+
 # ----------------------------------------------------------
 # ROUND COUNTDOWN
 # ----------------------------------------------------------
@@ -578,6 +581,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
