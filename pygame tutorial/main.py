@@ -248,9 +248,9 @@ class Fighter:
 
         # attacks
         if self.attack_cool > 0:
-            self.attack_cool -= 1
-            if self.proj_cool > 0:
-                self.proj_cool -= 1
+            self.attack_cool = max(0, self.attack_cool - 1)
+        if self.proj_cool > 0:
+            self.proj_cool = max(0, self.proj_cool - 1)
 
         if keys[self.melee_key] and self.attack_cool == 0:
             self.attack_cool = 18
@@ -720,6 +720,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
