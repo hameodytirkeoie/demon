@@ -140,7 +140,7 @@ class Fighter:
                  melee_key=None, proj_key=None):
 
         self.x = x
-        self.me = melee_key
+        self.melee_key = melee_key
         self.proj = proj_key
 
         self.health = 100
@@ -227,7 +227,7 @@ class Fighter:
         if self.proj_cool > 0:
             self.proj_cool -= 1
 
-        if keys[self.me] and self.attack_cool == 0:
+        if keys[self.melee_key] and self.attack_cool == 0:
             self.attack_cool = 18
             self.state = "attack"
             if self.rect.colliderect(opponent.rect):
@@ -468,6 +468,37 @@ def run_round_countdown(p1, p2, starting_time):
             draw_countdown_frame(p1, p2, label, starting_time)
             elapsed += clock.tick(60)
 
+
+def show_round_message(title, subtitle=None, duration_ms=1400):
+    """Overlay a simple, centered message for a short duration."""
+def play_round(p1, p2):
+    time_left = 60
+    timer_label = str(time_left)
+    tick = 0
+    projectiles = []
+    bottles = []
+    overtime = False
+    sudden_death = False
+
+    run_round_countdown(p1, p2, time_left)
+
+    while True:
+        screen.blit(bg, (0, 0))
+        outline = title_surf.copy()
+        outline.fill((0, 0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+        outline_rect = title_rect.move(4, 4)
+
+        screen.blit(outline, outline_rect)
+        screen.blit(title_surf, title_rect)
+
+        if subtitle:
+            sub_surf = ui_font.render(subtitle, True, WHITE)
+            sub_rect = sub_surf.get_rect(center=(WIDTH // 2, HEIGHT // 2 + 30))
+            screen.blit(sub_surf, sub_rect)
+
+        pygame.display.flip()
+        elapsed += clock.tick(60)
+
 # ----------------------------------------------------------
 # SINGLE ROUND
 # ----------------------------------------------------------
@@ -527,23 +558,46 @@ def play_round(p1, p2):
         p1.draw(screen)
         p2.draw(screen)
 
-        draw_ui(p1, p2, time_left)
+        draw_ui(p1, p2, timer_label)
 
         pygame.display.flip()
         clock.tick(60)
 
-        tick += 1
-        if tick >= 60:
-            tick = 0
-            time_left -= 1
+        if not sudden_death:
+            tick += 1
+            if tick >= 60:
+                tick = 0
+                time_left -= 1
+                timer_label = str(max(time_left, 0))
 
         # end conditions
-        if time_left <= 0:
-            return 1 if p1.health > p2.health else 2
+        if not sudden_death and time_left <= 0:
+            if p1.health > p2.health:
+                return 1
+            if p2.health > p1.health:
+                return 2
+
+            if not overtime:
+                show_round_message("TIME!", "Overtime begins")
+                overtime = True
+                time_left = 15
+                timer_label = str(time_left)
+                tick = 0
+                continue
+
+            show_round_message("OVERTIME TIE!", "Sudden death!")
+            sudden_death = True
+            timer_label = "SD"
+            tick = 0
+            continue
+
         if p1.health <= 0:
             return 2
         if p2.health <= 0:
             return 1
+
+        if sudden_death and p1.health != p2.health:
+            return 1 if p1.health > p2.health else 2
 
 
 # ----------------------------------------------------------
@@ -586,6 +640,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
