@@ -411,11 +411,18 @@ p2_control_positions = [
 
 def main_menu():
     while True:
+        for e in pygame.event.get():
+            if e.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+
+            if e.type == pygame.KEYDOWN and e.key == pygame.K_RETURN:
+                return
+
         screen.blit(menu_bg, (0, 0))
 
         screen.blit(menu_title, title_pos)
         screen.blit(start_prompt, prompt_pos)
-
         for line, pos in zip(p1_controls, p1_control_positions):
             screen.blit(line, pos)
 
@@ -424,13 +431,6 @@ def main_menu():
 
         pygame.display.flip()
         clock.tick(60)
-
-for e in pygame.event.get():
-    if e.type == pygame.QUIT:
-        sys.exit()
-
-    if e.type == pygame.KEYDOWN and e.key == pygame.K_RETURN:
-        break
 
 # ----------------------------------------------------------
 # ROUND COUNTDOWN
@@ -580,6 +580,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
