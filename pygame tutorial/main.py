@@ -88,11 +88,13 @@ class Pencil:
 
 
 class Bottle:
-    def __init__(self, x, y, direction):
+    def __init__(self, x, y, direction, power=1.0):
         self.x = x
         self.y = y
-        self.vx = 8 * direction
-        self.vy = -10
+        speed_scale = power
+
+        self.vx = 8 * speed_scale * direction
+        self.vy = -8 - 4 * speed_scale
         self.gravity = 0.5
 
         img = pygame.image.load(os.path.join(BASE_P1, "p1_bottle1.png")).convert_alpha()
@@ -172,6 +174,10 @@ class Fighter:
         self.attack_cool = 0
         self.proj_cool = 0
         self.just_shot = False
+        self.just_shot_power = 1.0
+        self.proj_charging = False
+        self.proj_charge = 0
+        self.max_proj_charge = 45
         self.hit_timer = 0
         self.win_timer = 0
 
@@ -224,7 +230,7 @@ class Fighter:
         # attacks
         if self.attack_cool > 0:
             self.attack_cool -= 1
-        if self.proj_cool > 0:
+         if self.proj_cool > 0:
             self.proj_cool -= 1
 
         if keys[self.melee_key] and self.attack_cool == 0:
@@ -234,11 +240,24 @@ class Fighter:
                 opponent.health -= 10
                 opponent.set_hit()
 
-        elif self.proj_key and keys[self.proj_key] and self.attack_cool == 0 and self.proj_cool == 0:
-            self.attack_cool = 20
-            self.proj_cool = 60  # ~1 second cooldown at 60 FPS
-            self.state = "attack"
-            self.just_shot = True
+        elif self.proj_key and self.attack_cool == 0 and self.proj_cool == 0:
+            if keys[self.proj_key]:
+                if not self.proj_charging:
+                    self.proj_charging = True
+                    self.proj_charge = 0
+                self.proj_charge = min(self.proj_charge + 1, self.max_proj_charge)
+                self.state = "attack"
+            elif self.proj_charging:
+                charge_ratio = self.proj_charge / self.max_proj_charge
+                self.just_shot_power = 0.5 + charge_ratio  # 0.5x on tap, up to 1.5x on full charge
+                self.attack_cool = 20
+                self.proj_cool = 60  # ~1 second cooldown at 60 FPS
+                self.state = "attack"
+                self.just_shot = True
+                self.proj_charging = False
+                self.proj_charge = 0
+            else:
+                self.state = "walk" if moving else "idle"
         else:
             if moving:
                 self.state = "walk"
@@ -381,8 +400,7 @@ controls_font = pygame.font.Font(None, 36)
 ui_font = pygame.font.Font(None, 28)
 
 menu_title = menu_font.render("Big Boy Simulator", True, WHITE)
-start_prompt = timer_font.render("Press ENTER (or NUMPAD ENTER) to start", True, WHITE)
-p1_controls = [
+start_prompt = timer_font.render("Press ENTER or NUMPAD ENTER to start", True, WHITE)p1_controls = [
     controls_font.render("Player 1: Move A/D, Jump W", True, WHITE),
     controls_font.render("Melee: SPACE  |  Throw: Q", True, WHITE)
 ]
@@ -527,7 +545,7 @@ def play_round(p1, p2):
         p2.update(keys, pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, p1)
 
         if p1.just_shot:
-            bottles.append(Bottle(p1.rect.centerx, p1.rect.y, 1))
+            bottles.append(Bottle(p1.rect.centerx, p1.rect.y, 1, power=p1.just_shot_power))
 
         if p2.just_shot:
             projectiles.append(Pencil(p2.rect.left, p2.rect.centery, -1))
@@ -645,6 +663,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
