@@ -23,6 +23,7 @@ GROUND_Y = HEIGHT - 40
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.abspath(os.path.join(BASE_DIR, os.pardir))
 assets_dir = os.path.join(project_root, "assets")
+BASE_P1 = os.path.join(assets_dir, "player1")
 BASE_P2 = os.path.join(assets_dir, "player2")
 
 # ----------------------------------------------------------
@@ -303,7 +304,7 @@ timer_font = pygame.font.Font(None, 60)
 controls_font = pygame.font.Font(None, 36)
 
 menu_title = menu_font.render("Big Boy Simulator", True, WHITE)
-start_prompt = timer_font.render("Press ENTER to start", True, WHITE)
+start_prompt = timer_font.render("Press ENTER or NUMPAD ENTER to start", True, WHITE)
 
 p1_controls = [
     controls_font.render("Player 1: Move A/D, Jump W", True, WHITE),
@@ -580,8 +581,8 @@ def test_bottle_hit_and_shatter(monkeypatch):
 
     monkeypatch.setattr(pygame.image, "load", dummy_load)
 
+    importlib.invalidate_caches()
     main = importlib.reload(importlib.import_module("main"))
-
     bottle = main.Bottle(x=0, y=0, direction=1)
 
     steps = 0
@@ -606,4 +607,5 @@ def test_bottle_hit_and_shatter(monkeypatch):
 
 
     pygame.quit()
+
 
