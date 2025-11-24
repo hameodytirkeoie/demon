@@ -2,12 +2,11 @@ import pygame
 import sys
 import os
 
-
 pygame.init()
 
 # --- Screen ---
 WIDTH, HEIGHT = 800, 400
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
+screen = pygame.display.set_mode(WIDTH, HEIGHT)
 pygame.display.set_caption("Big Boy Simulator")
 clock = pygame.time.Clock()
 
@@ -21,7 +20,8 @@ YELLOW = (255, 255, 0)
 SPRITE_W, SPRITE_H = 50, 80
 GROUND_Y = HEIGHT - 40
 
-assets_dir = "assets"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+assets_dir = os.path.join(BASE_DIR, "assets")
 BASE_P1 = os.path.join(assets_dir, "player1")
 BASE_P2 = os.path.join(assets_dir, "player2")
 
@@ -35,6 +35,26 @@ menu_bg = pygame.image.load(os.path.join(assets_dir, "menu_bg.png")).convert()
 menu_bg = pygame.transform.scale(menu_bg, (WIDTH, HEIGHT))
 
 
+# ----------------------------------------------------------
+# OPTIONAL UI IMAGES
+# ----------------------------------------------------------
+def load_ui_image(path, size):
+    if not os.path.exists(path):
+        return None
+    img = pygame.image.load(path).convert_alpha()
+    return pygame.transform.scale(img, size)
+
+
+HUD_PANEL_IMG = load_ui_image(os.path.join(assets_dir, "hud_panel.png"), (334, 34))
+TIMER_PANEL_IMG = load_ui_image(os.path.join(assets_dir, "timer_panel.png"), (140, 48))
+PIXEL_TIMER_BG = load_ui_image(os.path.join(assets_dir, "timer_bg.png"), (140, 48))
+
+
+def render_pixel_text(text, color, scale=3):
+    pixel_base = pygame.font.Font(None, 18)
+    surf = pixel_base.render(text, True, color)
+    w, h = surf.get_size()
+    return pygame.transform.scale(surf, (w * scale, h * scale))
 # ----------------------------------------------------------
 # UTIL: LOAD SPRITE
 # ----------------------------------------------------------
@@ -155,6 +175,8 @@ class Fighter:
         self.hit_timer = 0
         self.win_timer = 0
 
+        self.image = self.idle_frames[0]
+
     def set_hit(self):
         self.state = "hit"
         self.frame = 0
@@ -200,8 +222,8 @@ class Fighter:
             self.on_ground = True
 
         # attacks
-            if self.attack_cool > 0:
-                self.attack_cool -= 1
+        if self.attack_cool > 0:
+            self.attack_cool -= 1
         if self.proj_cool > 0:
             self.proj_cool -= 1
 
@@ -284,7 +306,7 @@ def create_players():
 # ----------------------------------------------------------
 # DRAW UI (HEALTH + TIMER)
 # ----------------------------------------------------------
-def draw_ui(p1, p2, time_left):
+def draw_ui(p1, p2, time_left, countdown_text=None):
     bar_w = 320
     bar_h = 22
 
@@ -296,8 +318,11 @@ def draw_ui(p1, p2, time_left):
         shadow = panel_rect.move(3, 3)
         pygame.draw.rect(screen, (0, 0, 0), shadow, border_radius=10)
 
-        pygame.draw.rect(screen, (26, 26, 40), panel_rect, border_radius=10)
-        pygame.draw.rect(screen, (90, 90, 120), panel_rect, width=2, border_radius=10)
+        if HUD_PANEL_IMG:
+            screen.blit(HUD_PANEL_IMG, panel_rect.topleft)
+        else:
+            pygame.draw.rect(screen, (26, 26, 40), panel_rect, border_radius=10)
+            pygame.draw.rect(screen, (90, 90, 120), panel_rect, width=2, border_radius=10)
 
         track_rect = base_rect.inflate(8, 6)
         pygame.draw.rect(screen, (40, 40, 60), track_rect, border_radius=8)
@@ -326,17 +351,24 @@ def draw_ui(p1, p2, time_left):
     timer_rect = pygame.Rect(WIDTH // 2 - 70, 12, 140, 48)
     timer_shadow = timer_rect.move(3, 3)
     pygame.draw.rect(screen, (0, 0, 0), timer_shadow, border_radius=10)
-    pygame.draw.rect(screen, (24, 32, 60), timer_rect, border_radius=10)
-    pygame.draw.rect(screen, (110, 140, 200), timer_rect, width=2, border_radius=10)
+
+    if TIMER_PANEL_IMG:
+        screen.blit(TIMER_PANEL_IMG, timer_rect.topleft)
+    else:
+        pygame.draw.rect(screen, (24, 32, 60), timer_rect, border_radius=10)
+        pygame.draw.rect(screen, (110, 140, 200), timer_rect, width=2, border_radius=10)
+
+    if PIXEL_TIMER_BG:
+        screen.blit(PIXEL_TIMER_BG, timer_rect.topleft)
 
     label = ui_font.render("TIME", True, WHITE)
     label_pos = label.get_rect(midtop=(timer_rect.centerx, timer_rect.y + 4))
     screen.blit(label, label_pos)
 
-    timer_text = timer_font.render(str(time_left), True, WHITE)
-    text_pos = timer_text.get_rect(center=(timer_rect.centerx, timer_rect.y + timer_rect.h - 22))
-    screen.blit(timer_text, text_pos)
-
+    timer_label = countdown_text if countdown_text is not None else str(time_left)
+    timer_surface = render_pixel_text(timer_label.rjust(2, " "), WHITE, 3)
+    text_pos = timer_surface.get_rect(center=(timer_rect.centerx, timer_rect.y + timer_rect.h - 20))
+    screen.blit(timer_surface, text_pos)
 
 # ----------------------------------------------------------
 # MAIN MENU
@@ -395,8 +427,39 @@ def main_menu():
 
         for e in pygame.event.get():
             if e.type == pygame.QUIT: sys.exit()
-            if e.type == pygame.KEYDOWN and e.key == pygame.K_RETURN:
+                if e.type == pygame.KEYDOWN and e.key == pygame.K_RETURN:
                 return
+# ----------------------------------------------------------
+# ROUND COUNTDOWN
+# ----------------------------------------------------------
+def draw_countdown_frame(p1, p2, label, starting_time):
+    screen.blit(bg, (0, 0))
+    p1.draw(screen)
+    p2.draw(screen)
+    draw_ui(p1, p2, starting_time, countdown_text=label)
+
+    overlay = render_pixel_text(label, WHITE, 5)
+    outline = overlay.copy()
+    outline.fill((0, 0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+    outline_rect = overlay.get_rect(center=(WIDTH // 2, HEIGHT // 2))
+    shadow = outline_rect.move(4, 4)
+    screen.blit(outline, shadow)
+    screen.blit(overlay, outline_rect)
+
+    pygame.display.flip()
+
+
+def run_round_countdown(p1, p2, starting_time):
+    steps = ["3", "2", "1", "GO"]
+    for label in steps:
+        target_ms = 800 if label == "GO" else 1000
+        elapsed = 0
+        while elapsed < target_ms:
+            for e in pygame.event.get():
+                if e.type == pygame.QUIT:
+                    sys.exit()
+            draw_countdown_frame(p1, p2, label, starting_time)
+            elapsed += clock.tick(60)
 # ----------------------------------------------------------
 # SINGLE ROUND
 # ----------------------------------------------------------
@@ -405,6 +468,8 @@ def play_round(p1, p2):
     tick = 0
     projectiles = []
     bottles = []
+
+    run_round_countdown(p1, p2, time_left)
 
     while True:
         screen.blit(bg, (0, 0))
@@ -513,6 +578,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
