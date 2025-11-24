@@ -140,8 +140,8 @@ class Fighter:
                  melee_key=None, proj_key=None):
 
         self.x = x
-        self.me = melee_key
-        self.proj = proj_key
+        self.melee_key = melee_key
+        self.proj_key = proj_key
 
         self.health = 100
         self.velocity = 5
@@ -222,14 +222,14 @@ class Fighter:
         if self.proj_cool > 0:
             self.proj_cool -= 1
 
-        if keys[self.me] and self.attack_cool == 0:
+        if keys[self.melee_key] and self.attack_cool == 0:
             self.attack_cool = 18
             self.state = "attack"
             if self.rect.colliderect(opponent.rect):
                 opponent.health -= 10
                 opponent.set_hit()
 
-        elif self.proj and keys[self.proj] and self.attack_cool == 0 and self.proj_cool == 0:
+        elif self.proj_key and keys[self.proj_key] and self.attack_cool == 0 and self.proj_cool == 0:
             self.attack_cool = 20
             self.proj_cool = 60
             self.state = "attack"
@@ -577,6 +577,12 @@ def test_bottle_hit_and_shatter(monkeypatch):
 
     initialize_pygame_headless()
 
+    def dummy_load(_path):
+        """Return a minimal surface to avoid loading external assets."""
+        return pygame.Surface((1, 1), pygame.SRCALPHA)
+
+    monkeypatch.setattr(pygame.image, "load", dummy_load)
+
     main = importlib.reload(importlib.import_module("main"))
 
     bottle = main.Bottle(x=0, y=0, direction=1)
@@ -600,5 +606,6 @@ def test_bottle_hit_and_shatter(monkeypatch):
 
     bottle.update()
     assert bottle.dead is True
+
 
     pygame.quit()
