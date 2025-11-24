@@ -50,6 +50,25 @@ TIMER_PANEL_IMG = load_ui_image(os.path.join(assets_dir, "timer_panel.png"), (14
 PIXEL_TIMER_BG = load_ui_image(os.path.join(assets_dir, "timer_bg.png"), (140, 48))
 
 
+def load_hud_frames(subfolder, scale_to=None):
+    hud_root = os.path.join(assets_dir, "hud", subfolder)
+    if not os.path.isdir(hud_root):
+        return []
+
+    frames = []
+    for filename in sorted(os.listdir(hud_root)):
+        if not filename.lower().endswith((".png", ".jpg", ".jpeg")):
+            continue
+
+        path = os.path.join(hud_root, filename)
+        frame = pygame.image.load(path).convert_alpha()
+        if scale_to:
+            frame = pygame.transform.scale(frame, scale_to)
+        frames.append(frame)
+
+    return frames
+
+
 def render_pixel_text(text, color, scale=3):
     pixel_base = pygame.font.Font(None, 18)
     surf = pixel_base.render(text, True, color)
@@ -326,45 +345,69 @@ def create_players():
 # DRAW UI (HEALTH + TIMER)
 # ----------------------------------------------------------
 def draw_ui(p1, p2, time_left, countdown_text=None):
-    bar_w = 320
-    bar_h = 22
-
-    def draw_bar(x, y, ratio, label):
+    def draw_hud(bg, x, y, ratio):
         ratio = max(0, min(1, ratio))
-        base_rect = pygame.Rect(x, y, bar_w, bar_h)
-        panel_rect = base_rect.inflate(14, 12)
+        track_rect = pygame.Rect(x + 120, y + 78, 200, 14)
 
-        shadow = panel_rect.move(3, 3)
-        pygame.draw.rect(screen, (0, 0, 0), shadow, border_radius=10)
+        screen.blit(bg, (x, y))
 
-        if HUD_PANEL_IMG:
-            screen.blit(HUD_PANEL_IMG, panel_rect.topleft)
-        else:
-            pygame.draw.rect(screen, (26, 26, 40), panel_rect, border_radius=10)
-            pygame.draw.rect(screen, (90, 90, 120), panel_rect, width=2, border_radius=10)
+        fill_color = (60, 190, 90)
+        fill_rect = pygame.Rect(track_rect.x, track_rect.y, int(track_rect.w * ratio), track_rect.h)
+        pygame.draw.rect(screen, fill_color, fill_rect, border_radius=4)
+        highlight = pygame.Rect(fill_rect.x + 3, fill_rect.y + 3, max(0, fill_rect.w - 6), 4)
+        pygame.draw.rect(screen, (200, 255, 200), highlight, border_radius=3)
 
-        track_rect = base_rect.inflate(8, 6)
-        pygame.draw.rect(screen, (40, 40, 60), track_rect, border_radius=8)
+        value_surface = ui_font.render(f"{int(ratio * 100):03d}", True, WHITE)
+        value_pos = value_surface.get_rect(midright=(track_rect.right + 28, track_rect.centery))
+        screen.blit(value_surface, value_pos)
 
-        # Health color transitions from red -> amber -> green
-        if ratio > 0.6:
-            fill_color = (40, 200, 120)
-        elif ratio > 0.3:
-            fill_color = (240, 170, 60)
-        else:
-            fill_color = (210, 60, 60)
+    if HUD_FRAMES_P1 and HUD_FRAMES_P2:
+        tick = pygame.time.get_ticks()
+        p1_frame = HUD_FRAMES_P1[(tick // 150) % len(HUD_FRAMES_P1)]
+        p2_frame = HUD_FRAMES_P2[(tick // 150) % len(HUD_FRAMES_P2)]
 
-        fill_rect = pygame.Rect(base_rect.x, base_rect.y, int(bar_w * ratio), bar_h)
-        pygame.draw.rect(screen, fill_color, fill_rect, border_radius=6)
-        highlight = pygame.Rect(fill_rect.x + 4, fill_rect.y + 3, max(0, fill_rect.w - 8), 6)
-        pygame.draw.rect(screen, (255, 255, 255), highlight, border_radius=4)
+        draw_hud(p1_frame, 10, 10, p1.health / 100)
+        draw_hud(p2_frame, WIDTH - p2_frame.get_width() - 10, 10, p2.health / 100)
+    else:
+        bar_w = 320
+        bar_h = 22
 
-        label_surface = ui_font.render(label, True, WHITE)
-        label_pos = label_surface.get_rect(midleft=(panel_rect.x + 10, panel_rect.centery))
-        screen.blit(label_surface, label_pos)
+        def draw_bar(x, y, ratio, label):
+            ratio = max(0, min(1, ratio))
+            base_rect = pygame.Rect(x, y, bar_w, bar_h)
+            panel_rect = base_rect.inflate(14, 12)
 
-    draw_bar(18, 18, p1.health / 100, f"P1 {p1.health:03d}")
-    draw_bar(WIDTH - bar_w - 18, 18, p2.health / 100, f"P2 {p2.health:03d}")
+            shadow = panel_rect.move(3, 3)
+            pygame.draw.rect(screen, (0, 0, 0), shadow, border_radius=10)
+
+            if HUD_PANEL_IMG:
+                screen.blit(HUD_PANEL_IMG, panel_rect.topleft)
+            else:
+                pygame.draw.rect(screen, (26, 26, 40), panel_rect, border_radius=10)
+                pygame.draw.rect(screen, (90, 90, 120), panel_rect, width=2, border_radius=10)
+
+            track_rect = base_rect.inflate(8, 6)
+            pygame.draw.rect(screen, (40, 40, 60), track_rect, border_radius=8)
+
+            # Health color transitions from red -> amber -> green
+            if ratio > 0.6:
+                fill_color = (40, 200, 120)
+            elif ratio > 0.3:
+                fill_color = (240, 170, 60)
+            else:
+                fill_color = (210, 60, 60)
+
+            fill_rect = pygame.Rect(base_rect.x, base_rect.y, int(bar_w * ratio), bar_h)
+            pygame.draw.rect(screen, fill_color, fill_rect, border_radius=6)
+            highlight = pygame.Rect(fill_rect.x + 4, fill_rect.y + 3, max(0, fill_rect.w - 8), 6)
+            pygame.draw.rect(screen, (255, 255, 255), highlight, border_radius=4)
+
+            label_surface = ui_font.render(label, True, WHITE)
+            label_pos = label_surface.get_rect(midleft=(panel_rect.x + 10, panel_rect.centery))
+            screen.blit(label_surface, label_pos)
+
+        draw_bar(18, 18, p1.health / 100, f"P1 {p1.health:03d}")
+        draw_bar(WIDTH - bar_w - 18, 18, p2.health / 100, f"P2 {p2.health:03d}")
 
     # Timer panel
     timer_rect = pygame.Rect(WIDTH // 2 - 70, 12, 140, 48)
@@ -398,6 +441,19 @@ menu_font = pygame.font.Font(None, 80)
 timer_font = pygame.font.Font(None, 60)
 controls_font = pygame.font.Font(None, 36)
 ui_font = pygame.font.Font(None, 28)
+
+# HUD art loaded from sprite folders so the visuals can be authored externally.
+# Expected layout:
+# assets/
+#   hud/
+#     player1/
+#       frame1.png
+#       frame2.png
+#     player2/
+#       frame1.png
+#       ...
+HUD_FRAMES_P1 = load_hud_frames("player1")
+HUD_FRAMES_P2 = load_hud_frames("player2")
 
 menu_title = menu_font.render("Big Boy Simulator", True, WHITE)
 start_prompt = timer_font.render("Press ENTER or NUMPAD ENTER to start", True, WHITE)
@@ -664,6 +720,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
