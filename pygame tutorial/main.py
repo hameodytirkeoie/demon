@@ -458,10 +458,12 @@ def run_round_countdown(p1, p2, starting_time):
         target_ms = 800 if label == "GO" else 1000
         elapsed = 0
         while elapsed < target_ms:
-        for e in pygame.event.get():
-            if e.type == pygame.QUIT: sys.exit()
-            if e.type == pygame.KEYDOWN and e.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
-                return
+            for e in pygame.event.get():
+        if e.type == pygame.QUIT:
+            sys.exit()
+        if e.type == pygame.KEYDOWN and e.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+            return
+
 # ----------------------------------------------------------
 # SINGLE ROUND
 # ----------------------------------------------------------
@@ -580,6 +582,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
