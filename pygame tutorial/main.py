@@ -294,27 +294,61 @@ def draw_ui(p1, p2, time_left):
 # ----------------------------------------------------------
 # MAIN MENU
 # ----------------------------------------------------------
+# Pre-render menu text once to keep consistent sizing and avoid rebuilding
+# surfaces inside the loop.
 menu_font = pygame.font.Font(None, 80)
 timer_font = pygame.font.Font(None, 60)
+controls_font = pygame.font.Font(None, 36)
+
+menu_title = menu_font.render("Jeffy Is Coming", True, WHITE)
+start_prompt = timer_font.render("Press ENTER to start", True, WHITE)
+p1_controls = [
+    controls_font.render("Player 1: Move A/D, Jump W", True, WHITE),
+    controls_font.render("Melee: SPACE  |  Throw: Q", True, WHITE)
+]
+p2_controls = [
+    controls_font.render("Player 2: Move ←/→, Jump ↑", True, WHITE),
+    controls_font.render("Melee: ENTER  |  Throw: P", True, WHITE)
+]
+
+title_pos = menu_title.get_rect(center=(WIDTH // 2, 80))
+prompt_pos = start_prompt.get_rect(center=(WIDTH // 2, 260))
+
+left_x = 60
+right_x = WIDTH - 60
+top_y = 150
+spacing = 40
+
+p1_control_positions = [
+    (left_x, top_y + i * spacing)
+    for i in range(len(p1_controls))
+]
+p2_control_positions = [
+    (right_x - ctrl.get_width(), top_y + i * spacing)
+    for i, ctrl in enumerate(p2_controls)
+]
+
 
 def main_menu():
     while True:
         screen.blit(menu_bg, (0, 0))
 
-        t = menu_font.render("Jeffy Is Coming", True, WHITE)
-        press = timer_font.render("Press Forbbiden ENTER to start", True, WHITE)
+        screen.blit(menu_title, title_pos)
+        screen.blit(start_prompt, prompt_pos)
 
-        screen.blit(t, (WIDTH//2 - t.get_width()//2, 80))
-        screen.blit(press, (WIDTH//2 - press.get_width()//2, 260))
+        for line, pos in zip(p1_controls, p1_control_positions):
+            screen.blit(line, pos)
+
+        for line, pos in zip(p2_controls, p2_control_positions):
+            screen.blit(line, pos)
 
         pygame.display.flip()
+        clock.tick(60)
 
         for e in pygame.event.get():
             if e.type == pygame.QUIT: sys.exit()
             if e.type == pygame.KEYDOWN and e.key == pygame.K_RETURN:
                 return
-
-
 # ----------------------------------------------------------
 # SINGLE ROUND
 # ----------------------------------------------------------
@@ -428,3 +462,5 @@ def game_loop():
 game_loop()
 pygame.quit()
 sys.exit()
+
+
