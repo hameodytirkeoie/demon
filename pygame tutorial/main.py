@@ -504,6 +504,9 @@ def create_players():
         proj_key=pygame.K_p
     )
 
+    return p1, p2
+
+
 def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key):
     """Generate simple AI controls so solo players can battle a bot."""
 
@@ -675,7 +678,7 @@ HUD_FRAMES_P2 = load_hud_frames("player2", HUD_FRAME_SIZE, mirror=True)
 
 
 menu_title = menu_font.render("Big Boy Simulator", True, WHITE)
-start_prompt = timer_font.render("Press ENTER or NUMPAD ENTER for 2-Player", True, WHITE)
+start_prompt = timer_font.render("Press ENTER or NUMPAD ENTER for 2-player", True, WHITE)
 single_p1_prompt = controls_font.render("Press 1 to play as Player 1 (Player 2 uses AI)", True, WHITE)
 single_p2_prompt = controls_font.render("Press 2 to play as Player 2 (Player 1 uses AI)", True, WHITE)
 p1_controls = [
@@ -1002,6 +1005,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
