@@ -367,9 +367,8 @@ def draw_ui(p1, p2, time_left, countdown_text=None):
         screen.blit(value_surface, value_pos)
 
     if HUD_FRAMES_P1 and HUD_FRAMES_P2:
-        tick = pygame.time.get_ticks()
-        p1_frame = HUD_FRAMES_P1[(tick // 150) % len(HUD_FRAMES_P1)]
-        p2_frame = HUD_FRAMES_P2[(tick // 150) % len(HUD_FRAMES_P2)]
+        p1_frame = HUD_FRAMES_P1[0]
+        p2_frame = HUD_FRAMES_P2[0]
 
         draw_hud(p1_frame, 10, 10, p1.health / 100)
         draw_hud(p2_frame, WIDTH - p2_frame.get_width() - 10, 10, p2.health / 100)
@@ -424,9 +423,6 @@ def draw_ui(p1, p2, time_left, countdown_text=None):
     else:
         pygame.draw.rect(screen, (24, 32, 60), timer_rect, border_radius=10)
         pygame.draw.rect(screen, (110, 140, 200), timer_rect, width=2, border_radius=10)
-
-    if PIXEL_TIMER_BG:
-        screen.blit(PIXEL_TIMER_BG, timer_rect.topleft)
 
     label = ui_font.render("TIME", True, WHITE)
     label_pos = label.get_rect(midtop=(timer_rect.centerx, timer_rect.y + 4))
@@ -725,6 +721,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
