@@ -628,9 +628,8 @@ def main_menu():
                     return "p1"
                 if e.key == pygame.K_2:
                     return "p2"
-
-         screen.blit(menu_bg, (0, 0))
-
+                    screen.blit(menu_bg, (0, 0))
+                    
         screen.blit(menu_title, title_pos)
         screen.blit(start_prompt, prompt_pos)
         screen.blit(single_p1_prompt, single_p1_pos)
@@ -907,6 +906,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
