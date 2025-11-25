@@ -391,10 +391,6 @@ def draw_ui(p1, p2, time_left, countdown_text=None):
         highlight = pygame.Rect(fill_rect.x + 3, fill_rect.y + 3, max(0, fill_rect.w - 6), 4)
         pygame.draw.rect(screen, (200, 255, 200), highlight, border_radius=3)
 
-        percent_surface = ui_font.render(f"{int(ratio * 100)}%", True, WHITE)
-        percent_pos = percent_surface.get_rect(center=track_rect.center)
-        screen.blit(percent_surface, percent_pos)
-
     if HUD_FRAMES_P1 and HUD_FRAMES_P2:
         p1_frame = HUD_FRAMES_P1[1] if p1.health < 40 and len(HUD_FRAMES_P1) > 1 else HUD_FRAMES_P1[0]
         p2_frame = HUD_FRAMES_P2[1] if p2.health < 40 and len(HUD_FRAMES_P2) > 1 else HUD_FRAMES_P2[0]
@@ -435,16 +431,8 @@ def draw_ui(p1, p2, time_left, countdown_text=None):
             highlight = pygame.Rect(fill_rect.x + 4, fill_rect.y + 3, max(0, fill_rect.w - 8), 6)
             pygame.draw.rect(screen, (255, 255, 255), highlight, border_radius=4)
 
-            percent_surface = ui_font.render(f"{int(ratio * 100)}%", True, WHITE)
-            percent_pos = percent_surface.get_rect(center=base_rect.center)
-            screen.blit(percent_surface, percent_pos)
-
-            label_surface = ui_font.render(label, True, WHITE)
-            label_pos = label_surface.get_rect(midleft=(panel_rect.x + 10, panel_rect.centery))
-            screen.blit(label_surface, label_pos)
-
-        draw_bar(18, 18, p1.health / 100, "P1")
-        draw_bar(WIDTH - bar_w - 18, 18, p2.health / 100, "P2")
+        draw_bar(18, 18, p1.health / 100)
+        draw_bar(WIDTH - bar_w - 18, 18, p2.health / 100)
 
     # Timer panel
     timer_rect = pygame.Rect(WIDTH // 2 - 70, 12, 140, 48)
@@ -537,6 +525,58 @@ def main_menu():
 
         for line, pos in zip(p2_controls, p2_control_positions):
             screen.blit(line, pos)
+
+        pygame.display.flip()
+        clock.tick(60)
+        pygame.display.flip()
+        clock.tick(60)
+
+
+def post_game_menu(champion_label):
+    button_font = load_font(["freesansbold", "arialblack", "impact"], 46, bold=True)
+
+    replay_surf = button_font.render("Replay", True, WHITE)
+    exit_surf = button_font.render("Exit", True, WHITE)
+
+    button_w = 220
+    button_h = 70
+    spacing = 30
+
+    center_x = WIDTH // 2
+    base_y = HEIGHT // 2 + 40
+
+    replay_rect = pygame.Rect(0, 0, button_w, button_h)
+    replay_rect.center = (center_x, base_y)
+
+    exit_rect = pygame.Rect(0, 0, button_w, button_h)
+    exit_rect.center = (center_x, base_y + button_h + spacing)
+
+    champion_text = menu_font.render(champion_label, True, WHITE)
+    champion_rect = champion_text.get_rect(center=(WIDTH // 2, HEIGHT // 2 - 70))
+
+    while True:
+        for e in pygame.event.get():
+            if e.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+
+            if e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
+                if replay_rect.collidepoint(e.pos):
+                    return "replay"
+                if exit_rect.collidepoint(e.pos):
+                    return "exit"
+
+        screen.blit(menu_bg, (0, 0))
+
+        pygame.draw.rect(screen, (10, 10, 20), replay_rect, border_radius=10)
+        pygame.draw.rect(screen, (80, 180, 255), replay_rect, width=4, border_radius=10)
+        screen.blit(replay_surf, replay_surf.get_rect(center=replay_rect.center))
+
+        pygame.draw.rect(screen, (10, 10, 20), exit_rect, border_radius=10)
+        pygame.draw.rect(screen, (255, 120, 120), exit_rect, width=4, border_radius=10)
+        screen.blit(exit_surf, exit_surf.get_rect(center=exit_rect.center))
+
+        screen.blit(champion_text, champion_rect)
 
         pygame.display.flip()
         clock.tick(60)
@@ -718,33 +758,33 @@ def play_round(p1, p2):
 # GAME LOOP (BEST OF 3)
 # ----------------------------------------------------------
 def game_loop():
-    main_menu()
+    playing = True
 
-    p1_score = 0
-    p2_score = 0
+    while playing:
+        main_menu()
 
-    while p1_score < 2 and p2_score < 2:
-        p1, p2 = create_players()
-        winner = play_round(p1, p2)
+        p1_score = 0
+        p2_score = 0
 
-        if winner == 1:
-            p1_score += 1
-            p1.set_win()
-        else:
-            p2_score += 1
-            p2.set_win()
+        while p1_score < 2 and p2_score < 2:
+            p1, p2 = create_players()
+            winner = play_round(p1, p2)
 
-        pygame.time.delay(1500)
+            round_winner_text = "PLAYER 1 WINS!" if winner == 1 else "PLAYER 2 WINS!"
+            if winner == 1:
+                p1_score += 1
+                p1.set_win()
+            else:
+                p2_score += 1
+                p2.set_win()
 
-    # FINAL SCREEN
-    screen.fill(BLACK)
-    txt = menu_font.render(
-        "PLAYER 1 WINS!" if p1_score > p2_score else "PLAYER 2 WINS!",
-        True, WHITE
-    )
-    screen.blit(txt, (WIDTH//2 - txt.get_width()//2, HEIGHT//2 - 50))
-    pygame.display.flip()
-    pygame.time.delay(3000)
+            show_round_message(round_winner_text, "u win big boy negative aura")
+
+        champion_label = "PLAYER 1 WINS!" if p1_score > p2_score else "PLAYER 2 WINS!"
+
+        choice = post_game_menu(champion_label)
+        if choice == "exit":
+            playing = False
 
 
 # ----------------------------------------------------------
@@ -754,6 +794,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
