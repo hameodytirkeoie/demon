@@ -504,8 +504,6 @@ def create_players():
         proj_key=pygame.K_p
     )
 
-    return p1, p2
-
 def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key):
     """Generate simple AI controls so solo players can battle a bot."""
 
@@ -516,9 +514,16 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key):
     # Face and advance toward the opponent unless already in striking range.
     fighter.facing_left = opponent.rect.centerx < fighter.rect.centerx
 
+    # Dynamically adjust spacing: trail when hurt, chase when the opponent is
+    # nearly defeated so fights end decisively instead of stalling at mid-range.
+    preferred = AI_COMFORT_DISTANCE
+    if opponent.health < 30:
+        preferred = max(100, preferred - 30)
+    elif fighter.health + 20 < opponent.health:
+        preferred += 30
+
     # Approach or back up to stay in a comfortable range.
     move_right = dx > 0
-    preferred = AI_COMFORT_DISTANCE
     if distance > preferred + 15:
         pressed.add(right_key if move_right else left_key)
     elif distance < preferred - 30:
@@ -538,16 +543,22 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key):
     if distance < 100 and fighter.attack_cool == 0:
         pressed.add(fighter.melee_key)
         fighter.ai_charge_frames = 0
-    elif fighter.proj_key:
-        if fighter.proj_cool == 0 and fighter.attack_cool == 0 and distance > 150:
+    elif fighter.proj_key and fighter.proj_cool == 0 and fighter.attack_cool == 0:
+        long_range = distance > preferred + 20
+        # Only begin charging when there is room to safely throw a bottle; once
+        # charging, hold long enough to boost damage before releasing.
+        if long_range and not fighter.proj_charging:
+            fighter.ai_charge_frames = 0
+            pressed.add(fighter.proj_key)
+        elif fighter.proj_charging:
             fighter.ai_charge_frames = min(fighter.ai_charge_frames + 1, fighter.max_proj_charge)
-            if fighter.ai_charge_frames <= 18:
-                # Hold to build a little power before releasing.
+            hold_target = 24 if opponent.health > 40 else 34
+            if fighter.ai_charge_frames < hold_target:
                 pressed.add(fighter.proj_key)
-            else:
-                fighter.ai_charge_frames = 0
         else:
             fighter.ai_charge_frames = 0
+    else:
+        fighter.ai_charge_frames = 0
 
     return InputState(pressed)
 
@@ -869,10 +880,13 @@ def play_round(p1, p2, p1_ai=False, p2_ai=False):
         p1.update(p1_inputs, pygame.K_a, pygame.K_d, pygame.K_w, p2)
         p2.update(p2_inputs, pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, p1)
         if p1.just_shot:
-            bottles.append(Bottle(p1.rect.centerx, p1.rect.y, 1, power=p1.just_shot_power))
+            direction = -1 if p1.facing_left else 1
+            bottles.append(Bottle(p1.rect.centerx, p1.rect.y, direction, power=p1.just_shot_power))
 
         if p2.just_shot:
-            projectiles.append(Pencil(p2.rect.left, p2.rect.centery, -1))
+            direction = -1 if p2.facing_left else 1
+            start_x = p2.rect.left if direction == -1 else p2.rect.right - 20
+            projectiles.append(Pencil(start_x, p2.rect.centery, direction))
 
         # update projectiles
         for p in projectiles[:]:
@@ -988,6 +1002,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
