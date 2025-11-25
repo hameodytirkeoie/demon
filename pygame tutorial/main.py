@@ -3,7 +3,6 @@ import sys
 import os
 
 pygame.init()
-
 # --- Screen ---
 WIDTH, HEIGHT = 900, 500
 ROUNDS_TO_WIN = 2
@@ -22,6 +21,16 @@ SPRITE_W, SPRITE_H = 50, 80
 GROUND_Y = HEIGHT - 40
 AI_COMFORT_DISTANCE = 140  # pixels of spacing the bot tries to maintain
 
+
+class GameSettings:
+    def __init__(self):
+        self.rounds_to_win = 2
+        self.round_time = 60
+        self.overtime_time = 15
+        self.ai_aggression = 1.0  # 1.0 = default bot behavior, lower/raise to soften/harden the AI
+
+
+SETTINGS = GameSettings()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 assets_dir = os.path.join(BASE_DIR, "assets")
 BASE_P1 = os.path.join(assets_dir, "player1")
@@ -576,8 +585,9 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key):
 # ----------------------------------------------------------
 # ----------------------------------------------------------
 # DRAW UI (HEALTH + TIMER)
-# ----------------------------------------------------------
-def draw_ui(p1, p2, time_left, countdown_text=None, round_score=None, target_wins=ROUNDS_TO_WIN):    def draw_hud(bg, x, y, ratio):
+# ----------------------------------------------------------def draw_ui(p1, p2, time_left, countdown_text=None, round_score=None, target_wins=None):
+    if target_wins is None:
+        target_wins = SETTINGS.rounds_to_win
         ratio = max(0, min(1, ratio))
 
         frame_w, frame_h = bg.get_size()
@@ -736,6 +746,7 @@ start_prompt = timer_font.render(
 )
 single_p1_prompt = controls_font.render("Press 1 to play as Player 1 (Player 2 uses AI)", True, WHITE)
 single_p2_prompt = controls_font.render("Press 2 to play as Player 2 (Player 1 uses AI)", True, WHITE)
+options_prompt = controls_font.render("Press O to tweak rounds, timer, and AI", True, WHITE)
 p1_controls = [
     controls_font.render("Player 1: Move A/D, Jump W", True, WHITE),
     controls_font.render("Melee: SPACE  |  Throw: Q", True, WHITE),
@@ -749,6 +760,7 @@ title_pos = menu_title.get_rect(center=(WIDTH // 2, 80))
 prompt_pos = start_prompt.get_rect(center=(WIDTH // 2, 260))
 single_p1_pos = single_p1_prompt.get_rect(midtop=(WIDTH // 2, prompt_pos.bottom + 30))
 single_p2_pos = single_p2_prompt.get_rect(midtop=(WIDTH // 2, single_p1_pos.bottom + 10))
+options_pos = options_prompt.get_rect(midtop=(WIDTH // 2, single_p2_pos.bottom + 16))
 
 left_x = 60
 right_x = WIDTH - 60
@@ -778,6 +790,8 @@ def main_menu():
                     return "p1"
                 if e.key == pygame.K_2:
                     return "p2"
+                if e.key == pygame.K_o:
+                    options_menu()
 
         screen.blit(menu_bg, (0, 0))
 
@@ -785,9 +799,97 @@ def main_menu():
         screen.blit(start_prompt, prompt_pos)
         screen.blit(single_p1_prompt, single_p1_pos)
         screen.blit(single_p2_prompt, single_p2_pos)
+        screen.blit(options_prompt, options_pos)
         for line, pos in zip(p1_controls, p1_control_positions):
             screen.blit(line, pos)
         for line, pos in zip(p2_controls, p2_control_positions):
+            screen.blit(line, pos)
+
+        pygame.display.flip()
+        clock.tick(60)
+
+
+def options_menu():
+    selection = 0
+    header = menu_font.render("Options", True, WHITE)
+    header_rect = header.get_rect(center=(WIDTH // 2, 90))
+
+    def clamp(val, lo, hi):
+        return max(lo, min(hi, val))
+
+    def option_value_text():
+        return [
+            f"{SETTINGS.rounds_to_win} (best of {SETTINGS.rounds_to_win * 2 - 1})",
+            f"{SETTINGS.round_time} seconds",
+            f"{SETTINGS.overtime_time} seconds",
+            f"{SETTINGS.ai_aggression:.1f}x",
+        ]
+
+    instructions = [
+        ui_font.render("UP/DOWN: select", True, WHITE),
+        ui_font.render("LEFT/RIGHT: change", True, WHITE),
+        ui_font.render("ENTER/ESC: back to menu", True, WHITE),
+    ]
+
+    while True:
+        for e in pygame.event.get():
+            if e.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+
+            if e.type == pygame.KEYDOWN:
+                if e.key in (pygame.K_ESCAPE, pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_BACKSPACE):
+                    return
+                if e.key in (pygame.K_UP, pygame.K_w):
+                    selection = (selection - 1) % 4
+                if e.key in (pygame.K_DOWN, pygame.K_s):
+                    selection = (selection + 1) % 4
+                if e.key in (pygame.K_LEFT, pygame.K_a):
+                    if selection == 0:
+                        SETTINGS.rounds_to_win = clamp(SETTINGS.rounds_to_win - 1, 1, 5)
+                    elif selection == 1:
+                        SETTINGS.round_time = clamp(SETTINGS.round_time - 15, 30, 120)
+                    elif selection == 2:
+                        SETTINGS.overtime_time = clamp(SETTINGS.overtime_time - 5, 10, 45)
+                    elif selection == 3:
+                        SETTINGS.ai_aggression = round(clamp(SETTINGS.ai_aggression - 0.1, 0.5, 1.6), 1)
+                if e.key in (pygame.K_RIGHT, pygame.K_d):
+                    if selection == 0:
+                        SETTINGS.rounds_to_win = clamp(SETTINGS.rounds_to_win + 1, 1, 5)
+                    elif selection == 1:
+                        SETTINGS.round_time = clamp(SETTINGS.round_time + 15, 30, 120)
+                    elif selection == 2:
+                        SETTINGS.overtime_time = clamp(SETTINGS.overtime_time + 5, 10, 45)
+                    elif selection == 3:
+                        SETTINGS.ai_aggression = round(clamp(SETTINGS.ai_aggression + 0.1, 0.5, 1.6), 1)
+
+        values = option_value_text()
+
+        screen.blit(menu_bg, (0, 0))
+        screen.blit(header, header_rect)
+
+        entries = [
+            "Rounds to win",
+            "Round timer",
+            "Overtime timer",
+            "AI aggression",
+        ]
+
+        start_y = 200
+        spacing = 60
+        for i, label in enumerate(entries):
+            color = WHITE if i == selection else (200, 200, 200)
+            label_surf = controls_font.render(label, True, color)
+            value_surf = ui_font.render(values[i], True, color)
+
+            label_pos = label_surf.get_rect(midleft=(WIDTH // 2 - 200, start_y + i * spacing))
+            value_pos = value_surf.get_rect(midright=(WIDTH // 2 + 220, start_y + i * spacing))
+
+            screen.blit(label_surf, label_pos)
+            screen.blit(value_surf, value_pos)
+
+        for i, line in enumerate(instructions):
+            pos = line.get_rect(center=(WIDTH // 2, HEIGHT - 120 + i * 26))
             screen.blit(line, pos)
 
         pygame.display.flip()
@@ -844,7 +946,9 @@ def post_game_menu(champion_label):
 # ----------------------------------------------------------
 # ROUND COUNTDOWN
 # ----------------------------------------------------------
-def draw_countdown_frame(p1, p2, label, starting_time, round_score=None, target_wins=ROUNDS_TO_WIN):
+def draw_countdown_frame(p1, p2, label, starting_time, round_score=None, target_wins=None):
+    if target_wins is None:
+        target_wins = SETTINGS.rounds_to_win
     screen.blit(bg, (0, 0))
     p1.draw(screen)
     p2.draw(screen)
@@ -861,8 +965,9 @@ def draw_countdown_frame(p1, p2, label, starting_time, round_score=None, target_
 
     pygame.display.flip()
 
-
-def run_round_countdown(p1, p2, starting_time, round_score=None, target_wins=ROUNDS_TO_WIN):
+def run_round_countdown(p1, p2, starting_time, round_score=None, target_wins=None):
+    if target_wins is None:
+        target_wins = SETTINGS.rounds_to_win
     steps = ["3", "2", "1", "GO"]
     for label in steps:
         target_ms = 800 if label == "GO" else 1000
@@ -910,30 +1015,79 @@ def show_round_message(title, subtitle=None, duration_ms=1400):
         pygame.display.flip()
         elapsed += clock.tick(60)
 
+
+def draw_pause_overlay(p1, p2, timer_label, round_score, target_wins):
+    shade = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+    shade.fill((0, 0, 0, 170))
+    screen.blit(shade, (0, 0))
+
+    title = render_pixel_text("PAUSED", WHITE, 4)
+    title_rect = title.get_rect(center=(WIDTH // 2, HEIGHT // 2 - 40))
+
+    screen.blit(title, title_rect)
+
+    instructions = [
+        ui_font.render("Enter/Esc: Resume", True, WHITE),
+        ui_font.render("R: Restart round", True, WHITE),
+        ui_font.render("Q: Quit to main menu", True, WHITE),
+    ]
+
+    for i, line in enumerate(instructions):
+        pos = line.get_rect(center=(WIDTH // 2, HEIGHT // 2 + i * 26))
+        screen.blit(line, pos)
+
+    draw_ui(p1, p2, timer_label, countdown_text="PAUSED", round_score=round_score, target_wins=target_wins)
+
 # ----------------------------------------------------------
 # SINGLE ROUND
 # ----------------------------------------------------------
-def play_round(p1, p2, p1_ai=False, p2_ai=False, round_score=None, target_wins=ROUNDS_TO_WIN):
-    time_left = 60
+def play_round(p1, p2, p1_ai=False, p2_ai=False, round_score=None, target_wins=None, settings=None):
+    settings = settings or SETTINGS
+    if target_wins is None:
+        target_wins = settings.rounds_to_win
+
+    time_left = settings.round_time
     timer_label = str(time_left)
     tick = 0
     projectiles = []
     bottles = []
     overtime = False
     sudden_death = False
+    paused = False
 
     run_round_countdown(p1, p2, time_left, round_score=round_score, target_wins=target_wins)
 
-
     while True:
-        screen.blit(bg, (0, 0))
         keys = pygame.key.get_pressed()
 
         for e in pygame.event.get():
             if e.type == pygame.QUIT: sys.exit()
+            if e.type == pygame.KEYDOWN:
+                if e.key == pygame.K_ESCAPE:
+                    paused = not paused
+                elif paused:
+                    if e.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                        paused = False
+                    elif e.key == pygame.K_r:
+                        return "restart"
+                    elif e.key == pygame.K_q:
+                        return "menu"
 
-        p1_inputs = keys if not p1_ai else build_ai_inputs(p1, p2, pygame.K_a, pygame.K_d, pygame.K_w)
-        p2_inputs = keys if not p2_ai else build_ai_inputs(p2, p1, pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP)
+        if paused:
+            screen.blit(bg, (0, 0))
+            for p in projectiles: p.draw(screen)
+            for b in bottles:    b.draw(screen)
+            p1.draw(screen)
+            p2.draw(screen)
+            draw_pause_overlay(p1, p2, timer_label, round_score, target_wins)
+            pygame.display.flip()
+            clock.tick(30)
+            continue
+
+        screen.blit(bg, (0, 0))
+
+        p1_inputs = keys if not p1_ai else build_ai_inputs(p1, p2, pygame.K_a, pygame.K_d, pygame.K_w, aggression=settings.ai_aggression)
+        p2_inputs = keys if not p2_ai else build_ai_inputs(p2, p1, pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, aggression=settings.ai_aggression)
 
         # update
         p1.update(p1_inputs, pygame.K_a, pygame.K_d, pygame.K_w, p2)
@@ -1000,7 +1154,7 @@ def play_round(p1, p2, p1_ai=False, p2_ai=False, round_score=None, target_wins=R
             if not overtime:
                 show_round_message("TIME!", "Overtime begins")
                 overtime = True
-                time_left = 15
+                time_left = settings.overtime_time
                 timer_label = str(time_left)
                 tick = 0
                 continue
@@ -1035,7 +1189,10 @@ def game_loop():
         p1_score = 0
         p2_score = 0
 
-        while p1_score < ROUNDS_TO_WIN and p2_score < ROUNDS_TO_WIN:
+        target_wins = SETTINGS.rounds_to_win
+        match_aborted = False
+
+        while p1_score < target_wins and p2_score < target_wins:
             p1, p2 = create_players()
             winner = play_round(
                 p1,
@@ -1043,8 +1200,16 @@ def game_loop():
                 p1_ai=p1_ai,
                 p2_ai=p2_ai,
                 round_score=(p1_score, p2_score),
-                target_wins=ROUNDS_TO_WIN,
+                target_wins=target_wins,
+                settings=SETTINGS,
             )
+
+            if winner == "restart":
+                continue
+            if winner == "menu":
+                match_aborted = True
+                break
+
             round_winner_text = "PLAYER 1 WINS!" if winner == 1 else "PLAYER 2 WINS!"
             if winner == 1:
                 p1_score += 1
@@ -1054,6 +1219,9 @@ def game_loop():
                 p2.set_win()
 
             show_round_message(round_winner_text, "you win big boy negative aura")
+
+        if match_aborted:
+            continue
 
         champion_label = "PLAYER 1 WINS!" if p1_score > p2_score else "PLAYER 2 WINS!"
 
@@ -1067,6 +1235,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
