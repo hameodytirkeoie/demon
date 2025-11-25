@@ -220,10 +220,15 @@ class Bottle:
             self.vy += self.gravity
             self.y += self.vy
 
-            if self.y > GROUND_Y - 20:
+             if self.y > GROUND_Y - 20:
                 self.hit = True
                 self.shatter_timer = 15
-
+                # Pin the bottle to the ground on impact so it doesn't sink
+                # below the floor while the shatter animation plays.
+                self.y = GROUND_Y - self.height
+                self.vx = 0
+                self.vy = 0
+                 
         elif self.shatter_timer > 0:
             self.shatter_timer -= 1
         else:
@@ -921,6 +926,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
