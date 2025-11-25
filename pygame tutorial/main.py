@@ -119,19 +119,8 @@ def load_hud_frames(subfolder, scale_to=None):
                 frame = pygame.transform.scale(frame, scale_to)
 
             frames.append(clean_hud_frame(frame))
-            return frames
-            if not filename.lower().endswith((".png", ".jpg", ".jpeg")):
-                continue
-
-        path = os.path.join(folder, filename)
-        frame = pygame.image.load(path).convert_alpha()
-        if scale_to:
-            frame = pygame.transform.scale(frame, scale_to)
-
-        frames.append(clean_hud_frame(frame))
 
     return frames
-
 def load_font(font_names, size, bold=False, italic=False):
     """Attempt to load one of the preferred fonts, falling back gracefully."""
 
@@ -855,6 +844,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
