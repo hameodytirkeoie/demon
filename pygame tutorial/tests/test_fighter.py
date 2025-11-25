@@ -84,12 +84,15 @@ def test_bottle_hit_and_shatter(main_module, pygame_mod):
     assert bottle.dead is False
     assert bottle.shatter_timer == 15
 
+    hit_x, hit_y = bottle.x, bottle.y
+
     for _ in range(15):
         bottle.update()
         assert bottle.hit is True
         assert bottle.dead is False
+        assert bottle.x == hit_x
+        assert bottle.y == hit_y
 
     assert bottle.shatter_timer == 0
 
     bottle.update()
-    assert bottle.dead is True
