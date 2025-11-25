@@ -221,9 +221,12 @@ class Pencil:
     def __init__(self, x, y, direction):
         self.rect = pygame.Rect(x, y, 20, 4)
         self.speed = 12 * direction
+        self.active = True
 
     def update(self):
         self.rect.x += self.speed
+        if self.rect.right < 0 or self.rect.left > WIDTH:
+            self.active = False
 
     def draw(self, surf):
         pygame.draw.rect(surf, YELLOW, self.rect)
@@ -682,7 +685,9 @@ HUD_FRAMES_P2 = load_hud_frames("player2", HUD_FRAME_SIZE)
 
 
 menu_title = menu_font.render("Big Boy Simulator", True, WHITE)
-start_prompt = timer_font.render("Press ENTER or NUMPAD ENTER for 2-player", True, WHITE)
+start_prompt = timer_font.render(
+    "Press ENTER or NUMPAD ENTER for two players", True, WHITE
+)
 single_p1_prompt = controls_font.render("Press 1 to play as Player 1 (Player 2 uses AI)", True, WHITE)
 single_p2_prompt = controls_font.render("Press 2 to play as Player 2 (Player 1 uses AI)", True, WHITE)
 p1_controls = [
@@ -1009,6 +1014,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
