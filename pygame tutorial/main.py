@@ -312,13 +312,18 @@ class Fighter:
         self.win_timer = 999
 
     def update(self, keys, left, right, jump, opponent):
+        # Keep facing synced to the opponent even while stunned or celebrating
+        # so the fighter never drifts into the wrong orientation mid-fight.
+        if opponent:
+            self.facing_left = opponent.rect.centerx < self.rect.centerx
+
         if self.win_timer > 0:
-            self.animate(self.win_frames, 12)
+            self.animate(self.win_frames, self.win_frames_flipped, 12)
             return
 
         if self.hit_timer > 0:
             self.hit_timer -= 1
-            self.animate(self.hit_frames, 6)
+            self.animate(self.hit_frames, self.hit_frames_flipped, 6)
             return
 
         self.just_shot = False
@@ -916,6 +921,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
