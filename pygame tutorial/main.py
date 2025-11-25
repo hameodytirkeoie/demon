@@ -424,7 +424,7 @@ def create_players():
     p2 = Fighter(
         770, BASE_P2,
         p2_idle, p2_walk, p2_attack, p2_hit, p2_win,
-        flip=False,
+        flip=True,
         melee_key=pygame.K_RETURN,
         proj_key=pygame.K_p
     )
@@ -566,6 +566,7 @@ menu_font = load_font(["freesansbold", "arialblack", "impact"], 80, bold=True)
 timer_font = load_font(["dejavusansmono", "consolas", "freesansbold"], 60)
 controls_font = load_font(["dejavusans", "arial", "freesansbold"], 32, bold=True)
 ui_font = load_font(["dejavusansmono", "consolas", "freesansbold"], 28)
+button_font = load_font(["freesansbold", "arialblack", "impact"], 50, bold=True)
 
 # HUD art loaded from sprite folders so the visuals can be authored externally.
 # Expected layout:
@@ -628,16 +629,24 @@ def main_menu():
                 if e.key == pygame.K_2:
                     return "p2"
 
-        screen.blit(menu_bg, (0, 0))
+         screen.blit(menu_bg, (0, 0))
 
         screen.blit(menu_title, title_pos)
         screen.blit(start_prompt, prompt_pos)
         screen.blit(single_p1_prompt, single_p1_pos)
         screen.blit(single_p2_prompt, single_p2_pos)
         for line, pos in zip(p1_controls, p1_control_positions):
-            
-            replay_surf = button_font.render("Replay", True, WHITE)
-            exit_surf = button_font.render("Exit", True, WHITE)
+            screen.blit(line, pos)
+        for line, pos in zip(p2_controls, p2_control_positions):
+            screen.blit(line, pos)
+
+        pygame.display.flip()
+        clock.tick(60)
+
+
+def post_game_menu(champion_label):
+    replay_surf = button_font.render("Replay", True, WHITE)
+    exit_surf = button_font.render("Exit", True, WHITE)
 
     button_w = 220
     button_h = 70
@@ -898,6 +907,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
