@@ -139,7 +139,7 @@ def load_hud_frames(subfolder, scale_to=None, mirror=False):
                 return (0, int(suffix))
         return (1, base)
 
-    frames = []
+    raw_frames = []
     seen = set()
 
     for folder in sources:
@@ -180,8 +180,8 @@ def load_hud_frames(subfolder, scale_to=None, mirror=False):
 def load_font(font_names, size, bold=False, italic=False):
     """Attempt to load one of the preferred fonts, falling back gracefully."""
 
-    # HUD art can ship in assets/hud/<player>/ or reuse frame*.png from
-    # assets/<player>/, so both locations remain valid for asset authors.
+    # Try each requested font (respecting style flags) and return the first
+    # match found on the system; if none resolve, fall back to pygame's default.
 
     if isinstance(font_names, str):
         font_names = [font_names]
@@ -988,6 +988,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
