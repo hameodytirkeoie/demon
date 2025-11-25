@@ -19,6 +19,7 @@ YELLOW = (255, 255, 0)
 
 SPRITE_W, SPRITE_H = 50, 80
 GROUND_Y = HEIGHT - 40
+AI_COMFORT_DISTANCE = 140  # pixels of spacing the bot tries to maintain
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 assets_dir = os.path.join(BASE_DIR, "assets")
@@ -499,6 +500,7 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key):
 
     # Approach or back up to stay in a comfortable range.
     move_right = dx > 0
+    preferred = AI_COMFORT_DISTANCE
     if distance > preferred + 15:
         pressed.add(right_key if move_right else left_key)
     elif distance < preferred - 30:
@@ -980,6 +982,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
