@@ -391,9 +391,9 @@ def draw_ui(p1, p2, time_left, countdown_text=None):
         highlight = pygame.Rect(fill_rect.x + 3, fill_rect.y + 3, max(0, fill_rect.w - 6), 4)
         pygame.draw.rect(screen, (200, 255, 200), highlight, border_radius=3)
 
-        value_surface = ui_font.render(f"{int(ratio * 100):03d}", True, WHITE)
-        value_pos = value_surface.get_rect(midright=(track_rect.right + 28, track_rect.centery))
-        screen.blit(value_surface, value_pos)
+        percent_surface = ui_font.render(f"{int(ratio * 100)}%", True, WHITE)
+        percent_pos = percent_surface.get_rect(center=track_rect.center)
+        screen.blit(percent_surface, percent_pos)
 
     if HUD_FRAMES_P1 and HUD_FRAMES_P2:
         p1_frame = HUD_FRAMES_P1[1] if p1.health < 40 and len(HUD_FRAMES_P1) > 1 else HUD_FRAMES_P1[0]
@@ -435,12 +435,16 @@ def draw_ui(p1, p2, time_left, countdown_text=None):
             highlight = pygame.Rect(fill_rect.x + 4, fill_rect.y + 3, max(0, fill_rect.w - 8), 6)
             pygame.draw.rect(screen, (255, 255, 255), highlight, border_radius=4)
 
+            percent_surface = ui_font.render(f"{int(ratio * 100)}%", True, WHITE)
+            percent_pos = percent_surface.get_rect(center=base_rect.center)
+            screen.blit(percent_surface, percent_pos)
+
             label_surface = ui_font.render(label, True, WHITE)
             label_pos = label_surface.get_rect(midleft=(panel_rect.x + 10, panel_rect.centery))
             screen.blit(label_surface, label_pos)
 
-        draw_bar(18, 18, p1.health / 100, f"P1 {p1.health:03d}")
-        draw_bar(WIDTH - bar_w - 18, 18, p2.health / 100, f"P2 {p2.health:03d}")
+        draw_bar(18, 18, p1.health / 100, "P1")
+        draw_bar(WIDTH - bar_w - 18, 18, p2.health / 100, "P2")
 
     # Timer panel
     timer_rect = pygame.Rect(WIDTH // 2 - 70, 12, 140, 48)
@@ -750,6 +754,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
