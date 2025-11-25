@@ -95,8 +95,6 @@ def test_bottle_hit_and_shatter(main_module, pygame_mod):
 
     assert bottle.shatter_timer == 0
 
-      bottle.update()
-
 
 def test_build_ai_inputs_ignores_offscreen_moves(main_module, pygame_mod):
     p1, p2 = main_module.create_players()
@@ -115,3 +113,4 @@ def test_build_ai_inputs_ignores_offscreen_moves(main_module, pygame_mod):
 
     inputs = main_module.build_ai_inputs(p1, p2, pygame_mod.K_a, pygame_mod.K_d, pygame_mod.K_w)
     assert pygame_mod.K_d not in inputs.pressed
+
