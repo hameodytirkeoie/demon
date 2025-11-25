@@ -68,7 +68,35 @@ def clean_hud_frame(frame):
     return frame
 
 
-def load_hud_frames(subfolder, scale_to=None):
+def normalize_hud_frame(frame, target_size, mirror=False):
+    """Scale HUD art to fit the target canvas without stretching.
+
+    Some HUD exports (notably Player 2's mid-health art) ship on canvases with
+    different aspect ratios. Scale the art to fit within the expected HUD size
+    while preserving aspect ratio, then center it on a transparent surface so
+    each frame occupies the same footprint. Optionally mirror the art so
+    Player 2 faces toward the center of the screen.
+    """
+
+    target_w, target_h = target_size
+    src_w, src_h = frame.get_size()
+
+    scale = min(target_w / src_w, target_h / src_h)
+    scaled_w = max(1, int(round(src_w * scale)))
+    scaled_h = max(1, int(round(src_h * scale)))
+
+    frame = pygame.transform.smoothscale(frame, (scaled_w, scaled_h))
+    if mirror:
+        frame = pygame.transform.flip(frame, True, False)
+
+    canvas = pygame.Surface((target_w, target_h), pygame.SRCALPHA)
+    offset_x = (target_w - scaled_w) // 2
+    offset_y = (target_h - scaled_h) // 2
+    canvas.blit(frame, (offset_x, offset_y))
+    return canvas
+
+
+def load_hud_frames(subfolder, scale_to=None, mirror=False):
     """Load HUD art for each player, falling back to their sprite folders.
 
     Some projects ship HUD frames inside assets/hud/<player>/ while others keep
@@ -128,7 +156,7 @@ def load_hud_frames(subfolder, scale_to=None):
             path = os.path.join(folder, filename)
             frame = pygame.image.load(path).convert_alpha()
             if scale_to:
-                frame = pygame.transform.scale(frame, scale_to)
+                frame = normalize_hud_frame(frame, scale_to, mirror=mirror)
 
             frames.append(clean_hud_frame(frame))
 
@@ -541,7 +569,7 @@ def draw_ui(p1, p2, time_left, countdown_text=None):
         p1_frame = pick_frame(HUD_FRAMES_P1, p1.health)
         p2_frame = pick_frame(HUD_FRAMES_P2, p2.health)
 
-        def ensure_size(frame):
+        def ensure_size(frame, mirror=False):
             if not frame:
                 return None
 
@@ -549,13 +577,13 @@ def draw_ui(p1, p2, time_left, countdown_text=None):
                 # Some HUD frames (notably Player 2's lower-health art) ship on
                 # a smaller canvas than the other frames, which leaves the HUD
                 # looking shrunken when it swaps. Normalize every frame to the
-                # requested HUD_FRAME_SIZE so both players stay visually even.
-                frame = pygame.transform.smoothscale(frame, HUD_FRAME_SIZE)
+                # requested HUD_FRAME_SIZE so both players stay visually even
+                # and keep the art centered within the canvas.
+                frame = normalize_hud_frame(frame, HUD_FRAME_SIZE, mirror=mirror)
             return frame
 
         p1_frame = ensure_size(p1_frame)
-        p2_frame = ensure_size(p2_frame)
-
+        p2_frame = ensure_size(p2_frame, mirror=True)
         draw_hud(p1_frame, 10, 10, p1.health / 100)
         draw_hud(p2_frame, WIDTH - p2_frame.get_width() - 10, 10, p2.health / 100)
     else:
@@ -625,7 +653,7 @@ button_font = load_font(["freesansbold", "arialblack", "impact"], 50, bold=True)
 #       frame1.png
 #       ...
 HUD_FRAMES_P1 = load_hud_frames("player1", HUD_FRAME_SIZE)
-HUD_FRAMES_P2 = load_hud_frames("player2", HUD_FRAME_SIZE)
+HUD_FRAMES_P2 = load_hud_frames("player2", HUD_FRAME_SIZE, mirror=True)
 
 
 menu_title = menu_font.render("Big Boy Simulator", True, WHITE)
@@ -952,6 +980,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
