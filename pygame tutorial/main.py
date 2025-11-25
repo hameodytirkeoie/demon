@@ -6,6 +6,7 @@ pygame.init()
 
 # --- Screen ---
 WIDTH, HEIGHT = 900, 500
+ROUNDS_TO_WIN = 2
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Big Boy Simulator")
 clock = pygame.time.Clock()
@@ -576,8 +577,7 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key):
 # ----------------------------------------------------------
 # DRAW UI (HEALTH + TIMER)
 # ----------------------------------------------------------
-def draw_ui(p1, p2, time_left, countdown_text=None):
-    def draw_hud(bg, x, y, ratio):
+def draw_ui(p1, p2, time_left, countdown_text=None, round_score=None, target_wins=ROUNDS_TO_WIN):    def draw_hud(bg, x, y, ratio):
         ratio = max(0, min(1, ratio))
 
         frame_w, frame_h = bg.get_size()
@@ -669,11 +669,20 @@ def draw_ui(p1, p2, time_left, countdown_text=None):
 
     # Timer panel
     timer_rect = pygame.Rect(WIDTH // 2 - 70, 12, 140, 48)
-
     timer_label = countdown_text if countdown_text is not None else str(time_left)
     timer_surface = render_pixel_text(timer_label.rjust(2, " "), WHITE, 3)
     text_pos = timer_surface.get_rect(center=(timer_rect.centerx, timer_rect.y + timer_rect.h - 20))
     screen.blit(timer_surface, text_pos)
+
+    if round_score is not None:
+        p1_score, p2_score = round_score
+        score_text = f"Rounds  P1: {p1_score}/{target_wins}  |  P2: {p2_score}/{target_wins}"
+        score_surface = ui_font.render(score_text, True, WHITE)
+        score_rect = score_surface.get_rect(center=(WIDTH // 2, timer_rect.bottom + 20))
+        score_shadow = score_surface.copy()
+        score_shadow.fill((0, 0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+        screen.blit(score_shadow, score_rect.move(2, 2))
+        screen.blit(score_surface, score_rect)
 # ----------------------------------------------------------
 # MAIN MENU
 # ----------------------------------------------------------
@@ -835,12 +844,12 @@ def post_game_menu(champion_label):
 # ----------------------------------------------------------
 # ROUND COUNTDOWN
 # ----------------------------------------------------------
-def draw_countdown_frame(p1, p2, label, starting_time):
+def draw_countdown_frame(p1, p2, label, starting_time, round_score=None, target_wins=ROUNDS_TO_WIN):
     screen.blit(bg, (0, 0))
     p1.draw(screen)
     p2.draw(screen)
     # Show the full round timer value while overlaying the countdown text.
-    draw_ui(p1, p2, starting_time, countdown_text=label)
+    draw_ui(p1, p2, starting_time, countdown_text=label, round_score=round_score, target_wins=target_wins)
 
     overlay = render_pixel_text(label, WHITE, 5)
     outline = overlay.copy()
@@ -853,7 +862,7 @@ def draw_countdown_frame(p1, p2, label, starting_time):
     pygame.display.flip()
 
 
-def run_round_countdown(p1, p2, starting_time):
+def run_round_countdown(p1, p2, starting_time, round_score=None, target_wins=ROUNDS_TO_WIN):
     steps = ["3", "2", "1", "GO"]
     for label in steps:
         target_ms = 800 if label == "GO" else 1000
@@ -865,7 +874,7 @@ def run_round_countdown(p1, p2, starting_time):
                 if e.type == pygame.KEYDOWN and e.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
                     return
 
-            draw_countdown_frame(p1, p2, label, starting_time)
+            draw_countdown_frame(p1, p2, label, starting_time, round_score=round_score, target_wins=target_wins)
             elapsed += clock.tick(60)
 
 
@@ -904,7 +913,7 @@ def show_round_message(title, subtitle=None, duration_ms=1400):
 # ----------------------------------------------------------
 # SINGLE ROUND
 # ----------------------------------------------------------
-def play_round(p1, p2, p1_ai=False, p2_ai=False):
+def play_round(p1, p2, p1_ai=False, p2_ai=False, round_score=None, target_wins=ROUNDS_TO_WIN):
     time_left = 60
     timer_label = str(time_left)
     tick = 0
@@ -913,7 +922,8 @@ def play_round(p1, p2, p1_ai=False, p2_ai=False):
     overtime = False
     sudden_death = False
 
-    run_round_countdown(p1, p2, time_left)
+    run_round_countdown(p1, p2, time_left, round_score=round_score, target_wins=target_wins)
+
 
     while True:
         screen.blit(bg, (0, 0))
@@ -968,8 +978,8 @@ def play_round(p1, p2, p1_ai=False, p2_ai=False):
         p1.draw(screen)
         p2.draw(screen)
 
-        draw_ui(p1, p2, timer_label)
-
+        draw_ui(p1, p2, timer_label, round_score=round_score, target_wins=target_wins)
+        
         pygame.display.flip()
         clock.tick(60)
 
@@ -1025,10 +1035,16 @@ def game_loop():
         p1_score = 0
         p2_score = 0
 
-        while p1_score < 2 and p2_score < 2:
+        while p1_score < ROUNDS_TO_WIN and p2_score < ROUNDS_TO_WIN:
             p1, p2 = create_players()
-            winner = play_round(p1, p2, p1_ai=p1_ai, p2_ai=p2_ai)
-
+            winner = play_round(
+                p1,
+                p2,
+                p1_ai=p1_ai,
+                p2_ai=p2_ai,
+                round_score=(p1_score, p2_score),
+                target_wins=ROUNDS_TO_WIN,
+            )
             round_winner_text = "PLAYER 1 WINS!" if winner == 1 else "PLAYER 2 WINS!"
             if winner == 1:
                 p1_score += 1
@@ -1051,6 +1067,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
