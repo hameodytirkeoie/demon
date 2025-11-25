@@ -636,9 +636,9 @@ def main_menu():
         screen.blit(single_p1_prompt, single_p1_pos)
         screen.blit(single_p2_prompt, single_p2_pos)
         for line, pos in zip(p1_controls, p1_control_positions):
-
-    replay_surf = button_font.render("Replay", True, WHITE)
-    exit_surf = button_font.render("Exit", True, WHITE)
+            
+            replay_surf = button_font.render("Replay", True, WHITE)
+            exit_surf = button_font.render("Exit", True, WHITE)
 
     button_w = 220
     button_h = 70
@@ -899,6 +899,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
