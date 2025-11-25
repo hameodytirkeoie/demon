@@ -430,7 +430,6 @@ def create_players():
     )
 
     return p1, p2
-    return p1, p2
 
 
 def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key):
@@ -691,7 +690,7 @@ def draw_countdown_frame(p1, p2, label, starting_time):
     p1.draw(screen)
     p2.draw(screen)
     # Show the full round timer value while overlaying the countdown text.
-    draw_ui(p1, p2, starting_time, countdown_text=None)
+    draw_ui(p1, p2, starting_time, countdown_text=label)
 
     overlay = render_pixel_text(label, WHITE, 5)
     outline = overlay.copy()
@@ -899,6 +898,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
