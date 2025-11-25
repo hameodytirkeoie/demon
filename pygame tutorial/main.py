@@ -547,15 +547,8 @@ def draw_ui(p1, p2, time_left, countdown_text=None):
         
     # Timer panel
     timer_rect = pygame.Rect(WIDTH // 2 - 70, 12, 140, 48)
-    timer_shadow = timer_rect.move(3, 3)
-    pygame.draw.rect(screen, (0, 0, 0), timer_shadow, border_radius=10)
 
-    if TIMER_PANEL_IMG:
-        screen.blit(TIMER_PANEL_IMG, timer_rect.topleft)
-    else:
-        pygame.draw.rect(screen, (24, 32, 60), timer_rect, border_radius=10)
-        pygame.draw.rect(screen, (110, 140, 200), timer_rect, width=2, border_radius=10)
-
+    # Keep the timer floating above the action without an opaque background.
     label = ui_font.render("TIME", True, WHITE)
     label_pos = label.get_rect(midtop=(timer_rect.centerx, timer_rect.y + 4))
     screen.blit(label, label_pos)
@@ -904,6 +897,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
