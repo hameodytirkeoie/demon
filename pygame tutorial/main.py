@@ -71,16 +71,27 @@ def clean_hud_frame(frame):
 
 
 def load_hud_frames(subfolder, scale_to=None):
+    """Load HUD art for each player, falling back to their sprite folders.
+
+    Some projects ship HUD frames inside assets/hud/<player>/ while others keep
+    frame art alongside the fighter sprites (frame1.png, frame2.png, ...).
+    This helper looks in both places so Player 2's HUD can reuse its authored
+    frames and stay visually consistent with Player 1.
+    """
+
     hud_root = os.path.join(assets_dir, "hud", subfolder)
-    if not os.path.isdir(hud_root):
+    alt_root = os.path.join(assets_dir, subfolder)
+
+    folder = hud_root if os.path.isdir(hud_root) else alt_root if os.path.isdir(alt_root) else None
+    if not folder:
         return []
 
     frames = []
-    for filename in sorted(os.listdir(hud_root)):
+    for filename in sorted(os.listdir(folder)):
         if not filename.lower().endswith((".png", ".jpg", ".jpeg")):
             continue
 
-        path = os.path.join(hud_root, filename)
+        path = os.path.join(folder, filename)
         frame = pygame.image.load(path).convert_alpha()
         if scale_to:
             frame = pygame.transform.scale(frame, scale_to)
@@ -794,6 +805,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
