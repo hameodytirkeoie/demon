@@ -30,7 +30,7 @@ def pygame_mod():
 
 @pytest.fixture
 def main_module(monkeypatch, pygame_mod):
-    """Import the game module with asset loading stubbed out."""
+    """Import the game module with image loading stubbed out only."""
     def dummy_load(_path):
         return pygame_mod.Surface((1, 1), pygame_mod.SRCALPHA)
 
@@ -83,6 +83,8 @@ def test_bottle_hit_and_shatter(main_module, pygame_mod):
     assert bottle.hit is True
     assert bottle.dead is False
     assert bottle.shatter_timer == 15
+    assert (bottle.width, bottle.height) == (bottle.broken_width, bottle.broken_height)
+    assert bottle.rect.size == (bottle.broken_width, bottle.broken_height)
 
     hit_x, hit_y = bottle.x, bottle.y
 
@@ -92,11 +94,18 @@ def test_bottle_hit_and_shatter(main_module, pygame_mod):
         assert bottle.dead is False
         assert bottle.x == hit_x
         assert bottle.y == hit_y
-
+        assert bottle.shatter_timer >= 0
 
     assert bottle.shatter_timer == 0
+    assert bottle.dead is False
 
-    for _ in range(3):
+    bottle.update()
+    assert bottle.hit is True
+    assert bottle.dead is True
+    assert bottle.x == hit_x
+    assert bottle.y == hit_y
+
+    for _ in range(2):
         bottle.update()
         assert bottle.hit is True
         assert bottle.dead is True
@@ -120,5 +129,6 @@ def test_build_ai_inputs_ignores_offscreen_moves(main_module, pygame_mod):
 
     inputs = main_module.build_ai_inputs(p1, p2, pygame_mod.K_a, pygame_mod.K_d, pygame_mod.K_w)
     assert pygame_mod.K_d not in inputs.pressed
+
 
 
