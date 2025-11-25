@@ -568,14 +568,18 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key):
 # ----------------------------------------------------------
 # DRAW UI (HEALTH + TIMER)
 # ----------------------------------------------------------
-def draw_ui(p1, p2, time_left, countdown_text=None):
     def draw_hud(bg, x, y, ratio):
         ratio = max(0, min(1, ratio))
         track_rect = pygame.Rect(x + 120, y + 78, 200, 14)
 
         screen.blit(bg, (x, y))
 
-        fill_color = (60, 190, 90)
+        if ratio > 0.6:
+            fill_color = (60, 190, 90)
+        elif ratio > 0.3:
+            fill_color = (235, 195, 60)
+        else:
+            fill_color = (215, 80, 80)
         fill_rect = pygame.Rect(track_rect.x, track_rect.y, int(track_rect.w * ratio), track_rect.h)
         pygame.draw.rect(screen, fill_color, fill_rect, border_radius=4)
         highlight = pygame.Rect(fill_rect.x + 3, fill_rect.y + 3, max(0, fill_rect.w - 6), 4)
@@ -674,7 +678,7 @@ button_font = load_font(["freesansbold", "arialblack", "impact"], 50, bold=True)
 #       frame1.png
 #       ...
 HUD_FRAMES_P1 = load_hud_frames("player1", HUD_FRAME_SIZE)
-HUD_FRAMES_P2 = load_hud_frames("player2", HUD_FRAME_SIZE, mirror=True)
+HUD_FRAMES_P2 = load_hud_frames("player2", HUD_FRAME_SIZE)
 
 
 menu_title = menu_font.render("Big Boy Simulator", True, WHITE)
@@ -1005,6 +1009,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
