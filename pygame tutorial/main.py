@@ -51,7 +51,7 @@ TIMER_PANEL_IMG = load_ui_image(os.path.join(assets_dir, "timer_panel.png"), (14
 # The HUD frames are sometimes authored at very large resolutions, which can
 # cover the playfield when loaded raw. Scale them to a consistent size so the
 # health bars and art stay within the top margin of the screen.
-HUD_FRAME_SIZE = (360, 140)
+HUD_FRAME_SIZE = None
 
 
 def clean_hud_frame(frame):
@@ -156,10 +156,24 @@ def load_hud_frames(subfolder, scale_to=None, mirror=False):
             seen.add(normalized)
             path = os.path.join(folder, filename)
             frame = pygame.image.load(path).convert_alpha()
-            if scale_to:
-                frame = normalize_hud_frame(frame, scale_to, mirror=mirror)
+            raw_frames.append(frame)
 
-            frames.append(clean_hud_frame(frame))
+    if not raw_frames:
+        return []
+
+    if scale_to:
+        target_size = scale_to
+    else:
+        target_w = max(frame.get_width() for frame in raw_frames)
+        target_h = max(frame.get_height() for frame in raw_frames)
+        target_size = (target_w, target_h)
+
+    frames = []
+    for frame in raw_frames:
+        needs_normalize = scale_to or frame.get_size() != target_size or mirror
+        if needs_normalize:
+            frame = normalize_hud_frame(frame, target_size, mirror=mirror)
+        frames.append(clean_hud_frame(frame))
 
     return frames
 
@@ -233,8 +247,8 @@ class Bottle:
         broken = pygame.image.load(os.path.join(BASE_P1, "p1_bottle_broken.png")).convert_alpha()
         self.broken = pygame.transform.scale(broken, (30, 30))
 
-        self.width = 25
-        self.height = 40
+        self.width, self.height = self.img.get_size()
+        self.broken_width, self.broken_height = self.broken.get_size()
         self.dead = False
         self.hit = False
         self.shatter_timer = 0
@@ -248,14 +262,18 @@ class Bottle:
             self.x += self.vx
             self.vy += self.gravity
             self.y += self.vy
-            if self.y > GROUND_Y - 20:
+            if self.y + self.height >= GROUND_Y:
                 self.hit = True
                 self.shatter_timer = 15
                 # Pin the bottle to the ground on impact so it doesn't sink
                 # below the floor while the shatter animation plays.
-                self.y = GROUND_Y - self.height
+                self.y = GROUND_Y - self.broken_height
                 self.vx = 0
                 self.vy = 0
+                # Update the collision box to match the shattered sprite so the
+                # rect aligns with the art during the lingering animation.
+                self.width = self.broken_width
+                self.height = self.broken_height
                  
         elif self.shatter_timer > 0:
             self.shatter_timer -= 1
@@ -571,23 +589,10 @@ def draw_ui(p1, p2, time_left, countdown_text=None):
         p1_frame = pick_frame(HUD_FRAMES_P1, p1.health)
         p2_frame = pick_frame(HUD_FRAMES_P2, p2.health)
 
-        def ensure_size(frame, mirror=False):
-            if not frame:
-                return None
-
-            if HUD_FRAME_SIZE and frame.get_size() != HUD_FRAME_SIZE:
-                # Some HUD frames (notably Player 2's lower-health art) ship on
-                # a smaller canvas than the other frames, which leaves the HUD
-                # looking shrunken when it swaps. Normalize every frame to the
-                # requested HUD_FRAME_SIZE so both players stay visually even
-                # and keep the art centered within the canvas.
-                frame = normalize_hud_frame(frame, HUD_FRAME_SIZE, mirror=mirror)
-            return frame
-
-        p1_frame = ensure_size(p1_frame)
-        p2_frame = ensure_size(p2_frame, mirror=True)
-        draw_hud(p1_frame, 10, 10, p1.health / 100)
-        draw_hud(p2_frame, WIDTH - p2_frame.get_width() - 10, 10, p2.health / 100)
+        if p1_frame:
+            draw_hud(p1_frame, 10, 10, p1.health / 100)
+        if p2_frame:
+            draw_hud(p2_frame, WIDTH - p2_frame.get_width() - 10, 10, p2.health / 100)
     else:
         bar_w = 320
         bar_h = 22
@@ -704,8 +709,9 @@ def main_menu():
                     return "p1"
                 if e.key == pygame.K_2:
                     return "p2"
-                    screen.blit(menu_bg, (0, 0))
-                    
+
+        screen.blit(menu_bg, (0, 0))
+
         screen.blit(menu_title, title_pos)
         screen.blit(start_prompt, prompt_pos)
         screen.blit(single_p1_prompt, single_p1_pos)
@@ -982,6 +988,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
