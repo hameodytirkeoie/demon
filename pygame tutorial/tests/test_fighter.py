@@ -1,6 +1,6 @@
 import importlib
-import sys
 import os
+import sys
 
 import pytest
 
@@ -78,7 +78,7 @@ def test_bottle_hit_and_shatter(main_module, pygame_mod):
     while not bottle.hit and not bottle.dead:
         bottle.update()
         steps += 1
-        assert steps < 1000, "Bottle never hit the ground"
+        assert steps < 200, f"Bottle never hit the ground after {steps} updates (pos=({bottle.x}, {bottle.y}))"
 
     assert bottle.hit is True
     assert bottle.dead is False
@@ -95,4 +95,23 @@ def test_bottle_hit_and_shatter(main_module, pygame_mod):
 
     assert bottle.shatter_timer == 0
 
-    bottle.update()
+      bottle.update()
+
+
+def test_build_ai_inputs_ignores_offscreen_moves(main_module, pygame_mod):
+    p1, p2 = main_module.create_players()
+
+    # Left edge: AI would walk left to close the gap, but should drop the input
+    # because the fighter is already flush with the screen boundary.
+    p1.rect = pygame_mod.Rect(0, 0, 50, 50)
+    p2.rect = pygame_mod.Rect(-250, 0, 50, 50)
+
+    inputs = main_module.build_ai_inputs(p1, p2, pygame_mod.K_a, pygame_mod.K_d, pygame_mod.K_w)
+    assert pygame_mod.K_a not in inputs.pressed
+
+    # Right edge: mirrored scenario where the AI would normally move right.
+    p1.rect = pygame_mod.Rect(main_module.WIDTH - 50, 0, 50, 50)
+    p2.rect = pygame_mod.Rect(main_module.WIDTH + 200, 0, 50, 50)
+
+    inputs = main_module.build_ai_inputs(p1, p2, pygame_mod.K_a, pygame_mod.K_d, pygame_mod.K_w)
+    assert pygame_mod.K_d not in inputs.pressed
