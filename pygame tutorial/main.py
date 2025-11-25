@@ -134,9 +134,11 @@ def load_hud_frames(subfolder, scale_to=None):
 
     return frames
 
-
 def load_font(font_names, size, bold=False, italic=False):
     """Attempt to load one of the preferred fonts, falling back gracefully."""
+
+    # HUD art can ship in assets/hud/<player>/ or reuse frame*.png from
+    # assets/<player>/, so both locations remain valid for asset authors.
 
     if isinstance(font_names, str):
         font_names = [font_names]
@@ -892,7 +894,7 @@ def game_loop():
                 p2_score += 1
                 p2.set_win()
 
-            show_round_message(round_winner_text, "u win big boy negative aura")
+            show_round_message(round_winner_text, "you win big boy negative aura")
 
         champion_label = "PLAYER 1 WINS!" if p1_score > p2_score else "PLAYER 2 WINS!"
 
@@ -906,6 +908,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
