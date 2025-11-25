@@ -50,8 +50,10 @@ TIMER_PANEL_IMG = load_ui_image(os.path.join(assets_dir, "timer_panel.png"), (14
 
 # The HUD frames are sometimes authored at very large resolutions, which can
 # cover the playfield when loaded raw. Scale them to a consistent size so the
-# health bars and art stay within the top margin of the screen.
-HUD_FRAME_SIZE = None
+# health bars and art stay within the top margin of the screen. This size
+# leaves room for the timer panel and keeps both HUDs anchored in the top
+# corners without overlapping gameplay.
+HUD_FRAME_SIZE = (360, 140)
 
 
 def clean_hud_frame(frame):
@@ -577,7 +579,17 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key):
 def draw_ui(p1, p2, time_left, countdown_text=None):
     def draw_hud(bg, x, y, ratio):
         ratio = max(0, min(1, ratio))
-        track_rect = pygame.Rect(x + 120, y + 78, 200, 14)
+
+        frame_w, frame_h = bg.get_size()
+        bar_w = int(frame_w * 0.55)
+        bar_h = max(12, int(frame_h * 0.1))
+
+        # Anchor the bar near the bottom-right of the HUD art so it stays in the
+        # same relative position even if the frames are resized or authored at
+        # different aspect ratios.
+        bar_x = x + frame_w - bar_w - 32
+        bar_y = y + frame_h - bar_h - 20
+        track_rect = pygame.Rect(bar_x, bar_y, bar_w, bar_h)
 
         screen.blit(bg, (x, y))
 
@@ -587,9 +599,10 @@ def draw_ui(p1, p2, time_left, countdown_text=None):
             fill_color = (235, 195, 60)
         else:
             fill_color = (215, 80, 80)
+
         fill_rect = pygame.Rect(track_rect.x, track_rect.y, int(track_rect.w * ratio), track_rect.h)
         pygame.draw.rect(screen, fill_color, fill_rect, border_radius=4)
-        highlight = pygame.Rect(fill_rect.x + 3, fill_rect.y + 3, max(0, fill_rect.w - 6), 4)
+        highlight = pygame.Rect(fill_rect.x + 3, fill_rect.y + 3, max(0, fill_rect.w - 6), max(2, bar_h // 3))
         pygame.draw.rect(screen, (200, 255, 200), highlight, border_radius=3)
 
     def pick_frame(frames, health):
@@ -910,7 +923,7 @@ def play_round(p1, p2, p1_ai=False, p2_ai=False):
                 p1.health -= 5
                 p1.set_hit()
                 projectiles.remove(p)
-            elif p.rect.right < 0:
+            elif not p.active:
                 projectiles.remove(p)
 
         for b in bottles[:]:
@@ -1017,6 +1030,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
