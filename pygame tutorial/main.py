@@ -541,6 +541,21 @@ def draw_ui(p1, p2, time_left, countdown_text=None):
         p1_frame = pick_frame(HUD_FRAMES_P1, p1.health)
         p2_frame = pick_frame(HUD_FRAMES_P2, p2.health)
 
+        def ensure_size(frame):
+            if not frame:
+                return None
+
+            if HUD_FRAME_SIZE and frame.get_size() != HUD_FRAME_SIZE:
+                # Some HUD frames (notably Player 2's lower-health art) ship on
+                # a smaller canvas than the other frames, which leaves the HUD
+                # looking shrunken when it swaps. Normalize every frame to the
+                # requested HUD_FRAME_SIZE so both players stay visually even.
+                frame = pygame.transform.smoothscale(frame, HUD_FRAME_SIZE)
+            return frame
+
+        p1_frame = ensure_size(p1_frame)
+        p2_frame = ensure_size(p2_frame)
+
         draw_hud(p1_frame, 10, 10, p1.health / 100)
         draw_hud(p2_frame, WIDTH - p2_frame.get_width() - 10, 10, p2.health / 100)
     else:
@@ -937,6 +952,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
