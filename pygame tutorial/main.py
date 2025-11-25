@@ -571,6 +571,10 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key):
 # ----------------------------------------------------------
 # DRAW UI (HEALTH + TIMER)
 # ----------------------------------------------------------
+# ----------------------------------------------------------
+# DRAW UI (HEALTH + TIMER)
+# ----------------------------------------------------------
+def draw_ui(p1, p2, time_left, countdown_text=None):
     def draw_hud(bg, x, y, ratio):
         ratio = max(0, min(1, ratio))
         track_rect = pygame.Rect(x + 120, y + 78, 200, 14)
@@ -650,7 +654,7 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key):
 
         draw_bar(18, 18, p1.health / 100)
         draw_bar(WIDTH - bar_w - 18, 18, p2.health / 100)
-        
+
     # Timer panel
     timer_rect = pygame.Rect(WIDTH // 2 - 70, 12, 140, 48)
 
@@ -658,7 +662,6 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key):
     timer_surface = render_pixel_text(timer_label.rjust(2, " "), WHITE, 3)
     text_pos = timer_surface.get_rect(center=(timer_rect.centerx, timer_rect.y + timer_rect.h - 20))
     screen.blit(timer_surface, text_pos)
-
 # ----------------------------------------------------------
 # MAIN MENU
 # ----------------------------------------------------------
@@ -1014,6 +1017,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
