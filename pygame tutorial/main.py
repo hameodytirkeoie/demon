@@ -49,6 +49,11 @@ HUD_PANEL_IMG = load_ui_image(os.path.join(assets_dir, "hud_panel.png"), (334, 3
 TIMER_PANEL_IMG = load_ui_image(os.path.join(assets_dir, "timer_panel.png"), (140, 48))
 PIXEL_TIMER_BG = load_ui_image(os.path.join(assets_dir, "timer_bg.png"), (140, 48))
 
+# The HUD frames are sometimes authored at very large resolutions, which can
+# cover the playfield when loaded raw. Scale them to a consistent size so the
+# health bars and art stay within the top margin of the screen.
+HUD_FRAME_SIZE = (360, 140)
+
 
 def load_hud_frames(subfolder, scale_to=None):
     hud_root = os.path.join(assets_dir, "hud", subfolder)
@@ -452,8 +457,8 @@ ui_font = pygame.font.Font(None, 28)
 #     player2/
 #       frame1.png
 #       ...
-HUD_FRAMES_P1 = load_hud_frames("player1")
-HUD_FRAMES_P2 = load_hud_frames("player2")
+HUD_FRAMES_P1 = load_hud_frames("player1", HUD_FRAME_SIZE)
+HUD_FRAMES_P2 = load_hud_frames("player2", HUD_FRAME_SIZE)
 
 menu_title = menu_font.render("Big Boy Simulator", True, WHITE)
 start_prompt = timer_font.render("Press ENTER or NUMPAD ENTER to start", True, WHITE)
@@ -720,6 +725,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
