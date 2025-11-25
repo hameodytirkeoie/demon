@@ -53,7 +53,7 @@ TIMER_PANEL_IMG = load_ui_image(os.path.join(assets_dir, "timer_panel.png"), (14
 # health bars and art stay within the top margin of the screen. This size
 # leaves room for the timer panel and keeps both HUDs anchored in the top
 # corners without overlapping gameplay.
-HUD_FRAME_SIZE = (360, 140)
+HUD_FRAME_SIZE = (330, 220)
 
 
 def clean_hud_frame(frame):
@@ -581,14 +581,13 @@ def draw_ui(p1, p2, time_left, countdown_text=None):
         ratio = max(0, min(1, ratio))
 
         frame_w, frame_h = bg.get_size()
-        bar_w = int(frame_w * 0.55)
-        bar_h = max(12, int(frame_h * 0.1))
+        bar_w = int(frame_w * 0.62)
+        bar_h = max(16, int(frame_h * 0.12))
 
-        # Anchor the bar near the bottom-right of the HUD art so it stays in the
-        # same relative position even if the frames are resized or authored at
-        # different aspect ratios.
-        bar_x = x + frame_w - bar_w - 32
-        bar_y = y + frame_h - bar_h - 20
+        # Anchor the bar higher within the HUD so it sits inside the banner
+        # area, matching the reference layout even as the frame is resized.
+        bar_x = x + frame_w - bar_w - 42
+        bar_y = y + int(frame_h * 0.68)
         track_rect = pygame.Rect(bar_x, bar_y, bar_w, bar_h)
 
         screen.blit(bg, (x, y))
@@ -628,9 +627,9 @@ def draw_ui(p1, p2, time_left, countdown_text=None):
         p2_frame = pick_frame(HUD_FRAMES_P2, p2.health)
 
         if p1_frame:
-            draw_hud(p1_frame, 10, 10, p1.health / 100)
+            draw_hud(p1_frame, 10, 10, 1)
         if p2_frame:
-            draw_hud(p2_frame, WIDTH - p2_frame.get_width() - 10, 10, p2.health / 100)
+            draw_hud(p2_frame, WIDTH - p2_frame.get_width() - 10, 10, 1)
     else:
         bar_w = 320
         bar_h = 22
@@ -698,6 +697,28 @@ button_font = load_font(["freesansbold", "arialblack", "impact"], 50, bold=True)
 #       ...
 HUD_FRAMES_P1 = load_hud_frames("player1", HUD_FRAME_SIZE)
 HUD_FRAMES_P2 = load_hud_frames("player2", HUD_FRAME_SIZE)
+
+
+def upscale_frame(frame, scale):
+    """Blow up a HUD frame while keeping the canvas size consistent."""
+
+    src_w, src_h = frame.get_size()
+    target_w = max(1, int(round(src_w * scale)))
+    target_h = max(1, int(round(src_h * scale)))
+
+    enlarged = pygame.transform.smoothscale(frame, (target_w, target_h))
+    canvas = pygame.Surface((src_w, src_h), pygame.SRCALPHA)
+
+    # Center the enlarged art; if it overflows, blitting will crop the edges so
+    # the outer dimensions stay the same and the HUD anchors remain stable.
+    offset_x = (src_w - target_w) // 2
+    offset_y = (src_h - target_h) // 2
+    canvas.blit(enlarged, (offset_x, offset_y))
+    return canvas
+
+
+if len(HUD_FRAMES_P2) >= 2:
+    HUD_FRAMES_P2[1] = upscale_frame(HUD_FRAMES_P2[1], 1.12)
 
 
 menu_title = menu_font.render("Big Boy Simulator", True, WHITE)
@@ -1030,6 +1051,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
