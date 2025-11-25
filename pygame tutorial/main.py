@@ -44,7 +44,6 @@ def load_ui_image(path, size):
     img = pygame.image.load(path).convert_alpha()
     return pygame.transform.scale(img, size)
 
-
 HUD_PANEL_IMG = load_ui_image(os.path.join(assets_dir, "hud_panel.png"), (334, 34))
 TIMER_PANEL_IMG = load_ui_image(os.path.join(assets_dir, "timer_panel.png"), (140, 48))
 
@@ -92,27 +91,40 @@ def load_hud_frames(subfolder, scale_to=None):
     if not sources:
         return []
 
+    def normalize_frame_name(filename):
+        base, _ = os.path.splitext(filename)
+        lower = base.lower()
+        if lower.startswith("frame"):
+            return lower
+        if lower.startswith("fram"):
+            # Accept slightly misspelled exports like "fram2.png" so all HUD
+            # frames get surfaced in-game.
+            return "frame" + lower[4:]
+        return lower
+
     def sort_key(filename):
-        name, _ = os.path.splitext(filename)
-        if name.lower().startswith("frame"):
-            suffix = name[5:]
+        base = normalize_frame_name(filename)
+        if base.startswith("frame"):
+            suffix = base[5:]
             if suffix.isdigit():
                 return (0, int(suffix))
-        return (1, name.lower())
+        return (1, base)
 
     frames = []
     seen = set()
 
     for folder in sources:
         for filename in sorted(os.listdir(folder), key=sort_key):
-            if filename in seen:
+            normalized = normalize_frame_name(filename)
+
+            if normalized in seen:
                 continue
-            if not filename.lower().startswith("frame"):
+            if not normalized.startswith("frame"):
                 continue
             if not filename.lower().endswith((".png", ".jpg", ".jpeg")):
                 continue
 
-            seen.add(filename)
+            seen.add(normalized)
             path = os.path.join(folder, filename)
             frame = pygame.image.load(path).convert_alpha()
             if scale_to:
@@ -121,6 +133,8 @@ def load_hud_frames(subfolder, scale_to=None):
             frames.append(clean_hud_frame(frame))
 
     return frames
+
+
 def load_font(font_names, size, bold=False, italic=False):
     """Attempt to load one of the preferred fonts, falling back gracefully."""
 
@@ -219,6 +233,16 @@ class Bottle:
         else:
             surf.blit(self.img, (self.x, self.y))
 
+
+class InputState:
+    """Lightweight mapping so AI can drive fighters using key constants."""
+
+    def __init__(self, pressed=None):
+        self.pressed = set(pressed or [])
+
+    def __getitem__(self, key):
+        return key in self.pressed
+
 # ----------------------------------------------------------
 # FIGHTER CLASS
 # ----------------------------------------------------------
@@ -265,7 +289,8 @@ class Fighter:
         self.max_proj_charge = 45
         self.hit_timer = 0
         self.win_timer = 0
-
+        self.ai_charge_frames = 0
+                     
         self.image = self.idle_frames[0]
 
     def set_hit(self):
@@ -405,7 +430,43 @@ def create_players():
     )
 
     return p1, p2
+    return p1, p2
 
+
+def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key):
+    """Generate simple AI controls so solo players can battle a bot."""
+
+    pressed = set()
+    dx = opponent.rect.centerx - fighter.rect.centerx
+    distance = abs(dx)
+
+    # Approach or back up to stay in a comfortable range.
+    preferred = 110
+    if distance > preferred + 15:
+        pressed.add(right_key if dx > 0 else left_key)
+    elif distance < preferred - 30:
+        pressed.add(left_key if dx > 0 else right_key)
+
+    # Hop to close ground-level gaps or dodge projectiles.
+    if fighter.on_ground and distance < 140 and opponent.rect.bottom <= fighter.rect.bottom - 20:
+        pressed.add(jump_key)
+
+    # Attack decisions
+    if distance < 90 and fighter.attack_cool == 0:
+        pressed.add(fighter.melee_key)
+        fighter.ai_charge_frames = 0
+    elif fighter.proj_key:
+        if fighter.proj_cool == 0 and fighter.attack_cool == 0 and distance > 160:
+            fighter.ai_charge_frames = min(fighter.ai_charge_frames + 1, fighter.max_proj_charge)
+            if fighter.ai_charge_frames <= 18:
+                # Hold to build a little power before releasing.
+                pressed.add(fighter.proj_key)
+            else:
+                fighter.ai_charge_frames = 0
+        else:
+            fighter.ai_charge_frames = 0
+
+    return InputState(pressed)
 
 # ----------------------------------------------------------
 # DRAW UI (HEALTH + TIMER)
@@ -527,12 +588,15 @@ ui_font = load_font(["dejavusansmono", "consolas", "freesansbold"], 28)
 HUD_FRAMES_P1 = load_hud_frames("player1", HUD_FRAME_SIZE)
 HUD_FRAMES_P2 = load_hud_frames("player2", HUD_FRAME_SIZE)
 
+
 menu_title = menu_font.render("Big Boy Simulator", True, WHITE)
-start_prompt = timer_font.render("Press ENTER or NUMPAD ENTER to start", True, WHITE)
+start_prompt = timer_font.render("Press ENTER or NUMPAD ENTER for 2-Player", True, WHITE)
+single_p1_prompt = controls_font.render("Press 1 to play as Player 1 (Player 2 uses AI)", True, WHITE)
+single_p2_prompt = controls_font.render("Press 2 to play as Player 2 (Player 1 uses AI)", True, WHITE)
 p1_controls = [
     controls_font.render("Player 1: Move A/D, Jump W", True, WHITE),
-    controls_font.render("Melee: SPACE  |  Throw: Q", True, WHITE)
-]
+    controls_font.render("Melee: SPACE  |  Throw: Q", True, WHITE),
+]   
 p2_controls = [
     controls_font.render("Player 2: Move ←/→, Jump ↑", True, WHITE),
     controls_font.render("Melee: ENTER  |  Throw: P", True, WHITE)
@@ -555,7 +619,6 @@ p2_control_positions = [
     for i, ctrl in enumerate(p2_controls)
 ]
 
-
 def main_menu():
     while True:
         for e in pygame.event.get():
@@ -563,27 +626,21 @@ def main_menu():
                 pygame.quit()
                 sys.exit()
 
-            if e.type == pygame.KEYDOWN and e.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
-                return
+            if e.type == pygame.KEYDOWN:
+                if e.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                    return "versus"
+                if e.key == pygame.K_1:
+                    return "p1"
+                if e.key == pygame.K_2:
+                    return "p2"
 
         screen.blit(menu_bg, (0, 0))
 
         screen.blit(menu_title, title_pos)
         screen.blit(start_prompt, prompt_pos)
-        for line, pos in zip(p1_controls, p1_control_positions):
-            screen.blit(line, pos)
-
-        for line, pos in zip(p2_controls, p2_control_positions):
-            screen.blit(line, pos)
-
-        pygame.display.flip()
-        clock.tick(60)
-        pygame.display.flip()
-        clock.tick(60)
-
-
-def post_game_menu(champion_label):
-    button_font = load_font(["freesansbold", "arialblack", "impact"], 46, bold=True)
+        screen.blit(single_p1_prompt, single_p1_pos)
+        screen.blit(single_p2_prompt, single_p2_pos)
+        for line, pos in zip(p1_controls, p) :
 
     replay_surf = button_font.render("Replay", True, WHITE)
     exit_surf = button_font.render("Exit", True, WHITE)
@@ -703,7 +760,7 @@ def show_round_message(title, subtitle=None, duration_ms=1400):
 # ----------------------------------------------------------
 # SINGLE ROUND
 # ----------------------------------------------------------
-def play_round(p1, p2):
+def play_round(p1, p2, p1_ai=False, p2_ai=False):
     time_left = 60
     timer_label = str(time_left)
     tick = 0
@@ -721,10 +778,12 @@ def play_round(p1, p2):
         for e in pygame.event.get():
             if e.type == pygame.QUIT: sys.exit()
 
-        # update
-        p1.update(keys, pygame.K_a, pygame.K_d, pygame.K_w, p2)
-        p2.update(keys, pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, p1)
+        p1_inputs = keys if not p1_ai else build_ai_inputs(p1, p2, pygame.K_a, pygame.K_d, pygame.K_w)
+        p2_inputs = keys if not p2_ai else build_ai_inputs(p2, p1, pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP)
 
+        # update
+        p1.update(p1_inputs, pygame.K_a, pygame.K_d, pygame.K_w, p2)
+        p2.update(p2_inputs, pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, p1)
         if p1.just_shot:
             bottles.append(Bottle(p1.rect.centerx, p1.rect.y, 1, power=p1.just_shot_power))
 
@@ -811,14 +870,17 @@ def game_loop():
     playing = True
 
     while playing:
-        main_menu()
+        selection = main_menu()
+
+        p1_ai = selection == "p2"
+        p2_ai = selection == "p1"
 
         p1_score = 0
         p2_score = 0
 
         while p1_score < 2 and p2_score < 2:
             p1, p2 = create_players()
-            winner = play_round(p1, p2)
+            winner = play_round(p1, p2, p1_ai=p1_ai, p2_ai=p2_ai)
 
             round_winner_text = "PLAYER 1 WINS!" if winner == 1 else "PLAYER 2 WINS!"
             if winner == 1:
@@ -835,8 +897,6 @@ def game_loop():
         choice = post_game_menu(champion_label)
         if choice == "exit":
             playing = False
-
-
 # ----------------------------------------------------------
 # START GAME
 # ----------------------------------------------------------
@@ -844,16 +904,6 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
-
-
-
-
-
-
-
-
-
-
 
 
 
