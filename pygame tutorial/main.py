@@ -259,15 +259,21 @@ class Fighter:
         self.health = 100
         self.velocity = 5
 
-        self.flip = flip
+        # Track desired facing, but keep both orientations available so fighters
+        # always turn toward their opponent instead of staring off-screen.
+        self.facing_left = flip
         self.folder = folder
 
-        # Animations
-        self.idle_frames   = [load_sprite(folder, f, flip) for f in idle]
-        self.walk_frames   = [load_sprite(folder, f, flip) for f in walk]
-        self.attack_frames = [load_sprite(folder, f, flip) for f in attack]
-        self.hit_frames    = [load_sprite(folder, f, flip) for f in hit]
-        self.win_frames    = [load_sprite(folder, f, flip) for f in win]
+        def load_frames(names):
+            base_frames = [load_sprite(folder, f, False) for f in names]
+            flipped_frames = [pygame.transform.flip(img, True, False) for img in base_frames]
+            return base_frames, flipped_frames
+
+        self.idle_frames, self.idle_frames_flipped       = load_frames(idle)
+        self.walk_frames, self.walk_frames_flipped       = load_frames(walk)
+        self.attack_frames, self.attack_frames_flipped   = load_frames(attack)
+        self.hit_frames, self.hit_frames_flipped         = load_frames(hit)
+        self.win_frames, self.win_frames_flipped         = load_frames(win)
 
         # Animation state
         self.state = "idle"
@@ -339,6 +345,10 @@ class Fighter:
             self.vel_y = 0
             self.on_ground = True
 
+        # Turn to face the opponent so sprites never look away from the action.
+        if opponent:
+            self.facing_left = opponent.rect.centerx < self.rect.centerx
+
         # attacks
         if self.attack_cool > 0:
             self.attack_cool = max(0, self.attack_cool - 1)
@@ -375,16 +385,17 @@ class Fighter:
                 self.state = "walk"
             else:
                 self.state = "idle"
-
         # animations
         if self.state == "idle":
-            self.animate(self.idle_frames, self.idle_speed)
+            self.animate(self.idle_frames, self.idle_frames_flipped, self.idle_speed)
         elif self.state == "walk":
-            self.animate(self.walk_frames, 8)
+            self.animate(self.walk_frames, self.walk_frames_flipped, 8)
         elif self.state == "attack":
-            self.animate(self.attack_frames, 6)
+            self.animate(self.attack_frames, self.attack_frames_flipped, 6)
 
-    def animate(self, frames, speed):
+    def animate(self, base_frames, flipped_frames, speed):
+        frames = flipped_frames if self.facing_left else base_frames
+
         self.counter += 1
         if self.counter >= speed:
             self.counter = 0
@@ -394,7 +405,7 @@ class Fighter:
             if self.state == "attack":
                 self.state = "idle"
         self.image = frames[self.frame]
-
+        
     def draw(self, surf):
         surf.blit(self.image, self.rect.topleft)
 
@@ -433,13 +444,15 @@ def create_players():
 
     return p1, p2
 
-
 def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key):
     """Generate simple AI controls so solo players can battle a bot."""
 
     pressed = set()
     dx = opponent.rect.centerx - fighter.rect.centerx
     distance = abs(dx)
+
+    # Face and advance toward the opponent unless already in striking range.
+    fighter.facing_left = opponent.rect.centerx < fighter.rect.centerx
 
     # Approach or back up to stay in a comfortable range.
     preferred = 110
@@ -453,11 +466,11 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key):
         pressed.add(jump_key)
 
     # Attack decisions
-    if distance < 90 and fighter.attack_cool == 0:
+    if distance < 100 and fighter.attack_cool == 0:
         pressed.add(fighter.melee_key)
         fighter.ai_charge_frames = 0
     elif fighter.proj_key:
-        if fighter.proj_cool == 0 and fighter.attack_cool == 0 and distance > 160:
+        if fighter.proj_cool == 0 and fighter.attack_cool == 0 and distance > 150:
             fighter.ai_charge_frames = min(fighter.ai_charge_frames + 1, fighter.max_proj_charge)
             if fighter.ai_charge_frames <= 18:
                 # Hold to build a little power before releasing.
@@ -548,11 +561,6 @@ def draw_ui(p1, p2, time_left, countdown_text=None):
         
     # Timer panel
     timer_rect = pygame.Rect(WIDTH // 2 - 70, 12, 140, 48)
-
-    # Keep the timer floating above the action without an opaque background.
-    label = ui_font.render("TIME", True, WHITE)
-    label_pos = label.get_rect(midtop=(timer_rect.centerx, timer_rect.y + 4))
-    screen.blit(label, label_pos)
 
     timer_label = countdown_text if countdown_text is not None else str(time_left)
     timer_surface = render_pixel_text(timer_label.rjust(2, " "), WHITE, 3)
@@ -908,6 +916,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
