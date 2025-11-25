@@ -303,7 +303,10 @@ class Fighter:
         self.win_timer = 0
         self.ai_charge_frames = 0
                      
-        self.image = self.idle_frames[0]
+        # Seed the initial sprite with the correct facing so countdown screens
+        # render the fighter looking toward their opponent instead of turning
+        # around on the first animation update.
+        self.image = self.idle_frames_flipped[0] if self.facing_left else self.idle_frames[0]
 
     def set_hit(self):
         self.state = "hit"
@@ -341,6 +344,9 @@ class Fighter:
             self.rect.x += self.velocity
             moving = True
 
+        # keep fighters on screen
+        self.rect.x = max(0, min(self.rect.x, WIDTH - self.rect.width))
+        
         # jump
         if keys[jump] and self.on_ground:
             self.vel_y = -12
@@ -464,11 +470,17 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key):
     fighter.facing_left = opponent.rect.centerx < fighter.rect.centerx
 
     # Approach or back up to stay in a comfortable range.
-    preferred = 110
+    move_right = dx > 0
     if distance > preferred + 15:
-        pressed.add(right_key if dx > 0 else left_key)
+        pressed.add(right_key if move_right else left_key)
     elif distance < preferred - 30:
-        pressed.add(left_key if dx > 0 else right_key)
+        pressed.add(left_key if move_right else right_key)
+
+    # Avoid walking off-screen by ignoring pushes that would move beyond bounds.
+    if fighter.rect.left <= 0 and left_key in pressed:
+        pressed.remove(left_key)
+    if fighter.rect.right >= WIDTH and right_key in pressed:
+        pressed.remove(right_key)
 
     # Hop when the opponent is above the fighter so elevated foes can be reached.
     if fighter.on_ground and distance < 140 and opponent.rect.bottom <= fighter.rect.bottom - 20:
@@ -925,6 +937,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
