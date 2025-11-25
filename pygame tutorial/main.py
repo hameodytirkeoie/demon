@@ -5,7 +5,7 @@ import os
 pygame.init()
 
 # --- Screen ---
-WIDTH, HEIGHT = 800, 400
+WIDTH, HEIGHT = 900, 500
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Big Boy Simulator")
 clock = pygame.time.Clock()
@@ -55,6 +55,21 @@ PIXEL_TIMER_BG = load_ui_image(os.path.join(assets_dir, "timer_bg.png"), (140, 4
 HUD_FRAME_SIZE = (360, 140)
 
 
+def clean_hud_frame(frame):
+    """Remove bright, flat backgrounds so HUD art blends with the scene."""
+    frame = frame.convert_alpha()
+
+    corner_color = frame.get_at((0, 0))
+    avg = (corner_color.r + corner_color.g + corner_color.b) / 3
+
+    # Most exported HUD art uses a flat white canvas. Treat that color as a
+    # colorkey so the surrounding area becomes transparent when blitted.
+    if corner_color.a == 255 and avg > 245:
+        frame.set_colorkey((corner_color.r, corner_color.g, corner_color.b))
+
+    return frame
+
+
 def load_hud_frames(subfolder, scale_to=None):
     hud_root = os.path.join(assets_dir, "hud", subfolder)
     if not os.path.isdir(hud_root):
@@ -69,13 +84,27 @@ def load_hud_frames(subfolder, scale_to=None):
         frame = pygame.image.load(path).convert_alpha()
         if scale_to:
             frame = pygame.transform.scale(frame, scale_to)
-        frames.append(frame)
+
+        frames.append(clean_hud_frame(frame))
 
     return frames
 
+def load_font(font_names, size, bold=False, italic=False):
+    """Attempt to load one of the preferred fonts, falling back gracefully."""
+
+    if isinstance(font_names, str):
+        font_names = [font_names]
+
+    for name in font_names:
+        path = pygame.font.match_font(name, bold=bold, italic=italic)
+        if path:
+            return pygame.font.Font(path, size)
+
+    return pygame.font.Font(None, size)
+
 
 def render_pixel_text(text, color, scale=3):
-    pixel_base = pygame.font.Font(None, 18)
+    pixel_base = load_font(["freesansbold", "arial"], 18, bold=True)
     surf = pixel_base.render(text, True, color)
     w, h = surf.get_size()
     return pygame.transform.scale(surf, (w * scale, h * scale))
@@ -438,10 +467,10 @@ def draw_ui(p1, p2, time_left, countdown_text=None):
 # ----------------------------------------------------------
 # Pre-render menu text once to keep consistent sizing and avoid rebuilding
 # surfaces inside the loop.
-menu_font = pygame.font.Font(None, 80)
-timer_font = pygame.font.Font(None, 60)
-controls_font = pygame.font.Font(None, 36)
-ui_font = pygame.font.Font(None, 28)
+menu_font = load_font(["freesansbold", "arialblack", "impact"], 80, bold=True)
+timer_font = load_font(["dejavusansmono", "consolas", "freesansbold"], 60)
+controls_font = load_font(["dejavusans", "arial", "freesansbold"], 32, bold=True)
+ui_font = load_font(["dejavusansmono", "consolas", "freesansbold"], 28)
 
 # HUD art loaded from sprite folders so the visuals can be authored externally.
 # Expected layout:
@@ -721,6 +750,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
