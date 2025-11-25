@@ -47,7 +47,6 @@ def load_ui_image(path, size):
 
 HUD_PANEL_IMG = load_ui_image(os.path.join(assets_dir, "hud_panel.png"), (334, 34))
 TIMER_PANEL_IMG = load_ui_image(os.path.join(assets_dir, "timer_panel.png"), (140, 48))
-PIXEL_TIMER_BG = load_ui_image(os.path.join(assets_dir, "timer_bg.png"), (140, 48))
 
 # The HUD frames are sometimes authored at very large resolutions, which can
 # cover the playfield when loaded raw. Scale them to a consistent size so the
@@ -76,20 +75,53 @@ def load_hud_frames(subfolder, scale_to=None):
     Some projects ship HUD frames inside assets/hud/<player>/ while others keep
     frame art alongside the fighter sprites (frame1.png, frame2.png, ...).
     This helper looks in both places so Player 2's HUD can reuse its authored
-    frames and stay visually consistent with Player 1.
+    frames and stay visually consistent with Player 1. If HUD art is split
+    between the dedicated folder and the sprite folder, gather every frame_*.png
+    (or jpg) across both locations.
     """
 
     hud_root = os.path.join(assets_dir, "hud", subfolder)
     alt_root = os.path.join(assets_dir, subfolder)
 
-    folder = hud_root if os.path.isdir(hud_root) else alt_root if os.path.isdir(alt_root) else None
-    if not folder:
+    sources = []
+    if os.path.isdir(hud_root):
+        sources.append(hud_root)
+    if os.path.isdir(alt_root) and alt_root not in sources:
+        sources.append(alt_root)
+
+    if not sources:
         return []
 
+    def sort_key(filename):
+        name, _ = os.path.splitext(filename)
+        if name.lower().startswith("frame"):
+            suffix = name[5:]
+            if suffix.isdigit():
+                return (0, int(suffix))
+        return (1, name.lower())
+
     frames = []
-    for filename in sorted(os.listdir(folder)):
-        if not filename.lower().endswith((".png", ".jpg", ".jpeg")):
-            continue
+    seen = set()
+
+    for folder in sources:
+        for filename in sorted(os.listdir(folder), key=sort_key):
+            if filename in seen:
+                continue
+            if not filename.lower().startswith("frame"):
+                continue
+            if not filename.lower().endswith((".png", ".jpg", ".jpeg")):
+                continue
+
+            seen.add(filename)
+            path = os.path.join(folder, filename)
+            frame = pygame.image.load(path).convert_alpha()
+            if scale_to:
+                frame = pygame.transform.scale(frame, scale_to)
+
+            frames.append(clean_hud_frame(frame))
+            return frames
+            if not filename.lower().endswith((".png", ".jpg", ".jpeg")):
+                continue
 
         path = os.path.join(folder, filename)
         frame = pygame.image.load(path).convert_alpha()
@@ -402,9 +434,27 @@ def draw_ui(p1, p2, time_left, countdown_text=None):
         highlight = pygame.Rect(fill_rect.x + 3, fill_rect.y + 3, max(0, fill_rect.w - 6), 4)
         pygame.draw.rect(screen, (200, 255, 200), highlight, border_radius=3)
 
+    def pick_frame(frames, health):
+        if not frames:
+            return None
+
+        if len(frames) >= 3:
+            if health <= 30:
+                return frames[2]
+            if health <= 60:
+                return frames[1]
+            return frames[0]
+
+        if len(frames) == 2:
+            if health <= 30:
+                return frames[1]
+            return frames[0]
+
+        return frames[0]
+
     if HUD_FRAMES_P1 and HUD_FRAMES_P2:
-        p1_frame = HUD_FRAMES_P1[1] if p1.health < 40 and len(HUD_FRAMES_P1) > 1 else HUD_FRAMES_P1[0]
-        p2_frame = HUD_FRAMES_P2[1] if p2.health < 40 and len(HUD_FRAMES_P2) > 1 else HUD_FRAMES_P2[0]
+        p1_frame = pick_frame(HUD_FRAMES_P1, p1.health)
+        p2_frame = pick_frame(HUD_FRAMES_P2, p2.health)
 
         draw_hud(p1_frame, 10, 10, p1.health / 100)
         draw_hud(p2_frame, WIDTH - p2_frame.get_width() - 10, 10, p2.health / 100)
@@ -412,7 +462,7 @@ def draw_ui(p1, p2, time_left, countdown_text=None):
         bar_w = 320
         bar_h = 22
 
-        def draw_bar(x, y, ratio, label):
+        def draw_bar(x, y, ratio):
             ratio = max(0, min(1, ratio))
             base_rect = pygame.Rect(x, y, bar_w, bar_h)
             panel_rect = base_rect.inflate(14, 12)
@@ -444,7 +494,7 @@ def draw_ui(p1, p2, time_left, countdown_text=None):
 
         draw_bar(18, 18, p1.health / 100)
         draw_bar(WIDTH - bar_w - 18, 18, p2.health / 100)
-
+        
     # Timer panel
     timer_rect = pygame.Rect(WIDTH // 2 - 70, 12, 140, 48)
     timer_shadow = timer_rect.move(3, 3)
@@ -805,6 +855,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
