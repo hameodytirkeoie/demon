@@ -447,7 +447,7 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key):
     elif distance < preferred - 30:
         pressed.add(left_key if dx > 0 else right_key)
 
-    # Hop to close ground-level gaps or dodge projectiles.
+    # Hop when the opponent is above the fighter so elevated foes can be reached.
     if fighter.on_ground and distance < 140 and opponent.rect.bottom <= fighter.rect.bottom - 20:
         pressed.add(jump_key)
 
@@ -597,6 +597,8 @@ p2_controls = [
 
 title_pos = menu_title.get_rect(center=(WIDTH // 2, 80))
 prompt_pos = start_prompt.get_rect(center=(WIDTH // 2, 260))
+single_p1_pos = single_p1_prompt.get_rect(midtop=(WIDTH // 2, prompt_pos.bottom + 30))
+single_p2_pos = single_p2_prompt.get_rect(midtop=(WIDTH // 2, single_p1_pos.bottom + 10))
 
 left_x = 60
 right_x = WIDTH - 60
@@ -633,7 +635,7 @@ def main_menu():
         screen.blit(start_prompt, prompt_pos)
         screen.blit(single_p1_prompt, single_p1_pos)
         screen.blit(single_p2_prompt, single_p2_pos)
-        for line, pos in zip(p1_controls, p) :
+        for line, pos in zip(p1_controls, p1_control_positions):
 
     replay_surf = button_font.render("Replay", True, WHITE)
     exit_surf = button_font.render("Exit", True, WHITE)
@@ -897,6 +899,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
