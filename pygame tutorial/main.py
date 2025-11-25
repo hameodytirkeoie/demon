@@ -365,7 +365,7 @@ def create_players():
     )
 
     p2 = Fighter(
-        650, BASE_P2,
+        770, BASE_P2,
         p2_idle, p2_walk, p2_attack, p2_hit, p2_win,
         flip=False,
         melee_key=pygame.K_RETURN,
@@ -396,8 +396,8 @@ def draw_ui(p1, p2, time_left, countdown_text=None):
         screen.blit(value_surface, value_pos)
 
     if HUD_FRAMES_P1 and HUD_FRAMES_P2:
-        p1_frame = HUD_FRAMES_P1[0]
-        p2_frame = HUD_FRAMES_P2[0]
+        p1_frame = HUD_FRAMES_P1[1] if p1.health < 40 and len(HUD_FRAMES_P1) > 1 else HUD_FRAMES_P1[0]
+        p2_frame = HUD_FRAMES_P2[1] if p2.health < 40 and len(HUD_FRAMES_P2) > 1 else HUD_FRAMES_P2[0]
 
         draw_hud(p1_frame, 10, 10, p1.health / 100)
         draw_hud(p2_frame, WIDTH - p2_frame.get_width() - 10, 10, p2.health / 100)
@@ -750,6 +750,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
