@@ -30,7 +30,7 @@ def pygame_mod():
 
 @pytest.fixture
 def main_module(monkeypatch, pygame_mod):
-    """Import the game module with image loading stubbed out only."""
+    """Stub image loading and initialize a headless display before importing ``main``."""
     def dummy_load(_path):
         return pygame_mod.Surface((1, 1), pygame_mod.SRCALPHA)
 
@@ -129,6 +129,7 @@ def test_build_ai_inputs_ignores_offscreen_moves(main_module, pygame_mod):
 
     inputs = main_module.build_ai_inputs(p1, p2, pygame_mod.K_a, pygame_mod.K_d, pygame_mod.K_w)
     assert pygame_mod.K_d not in inputs.pressed
+
 
 
 
