@@ -598,185 +598,81 @@ class InputState:
     def __getitem__(self, key):
         return key in self.pressed
 
+# ----------------------------------------------------------
+# CLEAN + FINAL AI SYSTEM  
+# ----------------------------------------------------------
 def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key, aggression=1.0):
     pressed = set()
 
-    # --------------------------------------------------
-    # BASE DATA
-    # --------------------------------------------------
-    dx = opponent.rect.centerx - fighter.rect.centerx
-    distance = abs(dx)
-    moving_toward = dx > 0
-    fighter.facing_left = opponent.rect.centerx < fighter.rect.centerx
-
-def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key, aggression=1.0):
-    pressed = set()
-
-    # -------------------------
-    # BASE DATA
-    # -------------------------
     dx = opponent.rect.centerx - fighter.rect.centerx
     distance = abs(dx)
     moving_right = dx > 0
     fighter.facing_left = opponent.rect.centerx < fighter.rect.centerx
 
-    # -------------------------
-    # DIFFICULTY
-    # -------------------------
     diff = SETTINGS.ai_difficulty
 
+    # -----------------------------
+    # DIFFICULTY PRESETS
+    # -----------------------------
     if diff == "normal":
         REACT = 14
-        MELEE_CHANCE = 0.35
-        COMBO_CHANCE = 0.25
-        THROW_CHANCE = 0.20
-        DODGE_CHANCE = 0.35
+        MELEE = 0.35
+        COMBO = 0.25
+        THROW = 0.20
+        DODGE = 0.35
         SHUFFLE = 0.05
         PREDICT = 0
         CORNER_TRAP = False
         ANTI_AIR = 0.10
         WHIFF_PUNISH = False
+        FAKEOUT = 0.03
 
     elif diff == "sweaty":
         REACT = 9
-        MELEE_CHANCE = 0.55
-        COMBO_CHANCE = 0.55
-        THROW_CHANCE = 0.45
-        DODGE_CHANCE = 0.60
-        SHUFFLE = 0.10
+        MELEE = 0.55
+        COMBO = 0.55
+        THROW = 0.45
+        DODGE = 0.60
+        SHUFFLE = 0.12
         PREDICT = 4
         CORNER_TRAP = False
-        ANTI_AIR = 0.35
+        ANTI_AIR = 0.40
         WHIFF_PUNISH = False
+        FAKEOUT = 0.05
 
     elif diff == "bigboy":
-        REACT = 4
-        MELEE_CHANCE = 0.85
-        COMBO_CHANCE = 0.90
-        THROW_CHANCE = 0.75
-        DODGE_CHANCE = 0.85
-        SHUFFLE = 0.30
-        PREDICT = 14
+        REACT = 5
+        MELEE = 0.80
+        COMBO = 0.90
+        THROW = 0.75
+        DODGE = 0.85
+        SHUFFLE = 0.25
+        PREDICT = 12
         CORNER_TRAP = True
         ANTI_AIR = 0.65
         WHIFF_PUNISH = True
+        FAKEOUT = 0.12
 
     else:  # doumi gang
         REACT = 2
-        MELEE_CHANCE = 0.95
-        COMBO_CHANCE = 0.98
-        THROW_CHANCE = 0.90
-        DODGE_CHANCE = 0.95
-        SHUFFLE = 0.40
+        MELEE = 0.92
+        COMBO = 0.98
+        THROW = 0.90
+        DODGE = 0.95
+        SHUFFLE = 0.45
         PREDICT = 22
         CORNER_TRAP = True
         ANTI_AIR = 0.90
         WHIFF_PUNISH = True
+        FAKEOUT = 0.25
 
     # aggression
-    MELEE_CHANCE *= aggression
-    THROW_CHANCE *= aggression
-    DODGE_CHANCE = min(1.0, DODGE_CHANCE * aggression)
+    MELEE *= aggression
+    THROW *= aggression
+    DODGE = min(1.0, DODGE * aggression)
 
-    SPACING_LO, SPACING_HI = 80, 160
-
-    # -------------------------
-    # PROJECTILE DODGING
-    # -------------------------
-    danger_left = danger_right = danger_jump = False
-
-    for proj in global_projectiles:
-        if not getattr(proj, "active", True):
-            continue
-
-        pdx = proj.rect.centerx - fighter.rect.centerx
-        pdy = proj.rect.centery - fighter.rect.centery
-
-        if abs(pdx) < 170 and abs(pdy) < 80:
-            incoming = getattr(proj, "direction", 1)
-
-            if incoming > 0:
-                danger_right = True
-            else:
-                danger_left = True
-
-            if fighter.on_ground and random.random() < DODGE_CHANCE:
-                danger_jump = True
-
-    if danger_jump and fighter.on_ground:
-        pressed.add(jump_key)
-
-    if danger_left:
-        pressed.add(right_key)
-
-    if danger_right:
-        pressed.add(left_key)
-
-    # -------------------------
-    # MOVEMENT
-    # -------------------------
-    if not (danger_left or danger_right):
-
-        # far → approach
-        if distance > SPACING_HI:
-            pressed.add(right_key if moving_right else left_key)
-
-        # close → backstep
-        elif distance < SPACING_LO:
-            pressed.add(left_key if moving_right else right_key)
-
-        # neutral → shuffle
-        else:
-            if random.random() < SHUFFLE:
-                pressed.add(right_key if moving_right else left_key)
-            elif random.random() < SHUFFLE:
-                pressed.add(left_key if moving_right else right_key)
-
-        # anti-corner jump out
-        if fighter.rect.left < 30 and moving_right and fighter.on_ground:
-            pressed.add(jump_key)
-        if fighter.rect.right > WIDTH - 30 and not moving_right and fighter.on_ground:
-            pressed.add(jump_key)
-
-        # corner trapping on higher diff
-        if CORNER_TRAP:
-            if opponent.rect.left < 60:
-                pressed.add(right_key)
-            if opponent.rect.right > WIDTH - 60:
-                pressed.add(left_key)
-
-    # -------------------------
-    # ANTI-AIR
-    # -------------------------
-    if opponent.vel_y < -4:
-        if random.random() < ANTI_AIR:
-            pressed.add(fighter.melee_key)
-
-    # -------------------------
-    # WHIFF PUNISH
-    # -------------------------
-    if WHIFF_PUNISH and opponent.attack_cool > 0 and distance < 120:
-        pressed.add(fighter.melee_key)
-
-    # -------------------------
-    # MELEE ATTACK
-    # -------------------------
-    if distance < 80 and fighter.attack_cool == 0:
-        if random.random() < COMBO_CHANCE:
-            fighter.combo_step = (fighter.combo_step + 1) % 3
-            pressed.add(fighter.melee_key)
-        elif random.random() < MELEE_CHANCE:
-            pressed.add(fighter.melee_key)
-
-    # -------------------------
-    # PROJECTILE ATTACK
-    # -------------------------
-    elif distance > SPACING_HI - 20 and fighter.proj_cool == 0:
-        if not (danger_left or danger_right):
-            if random.random() < THROW_CHANCE:
-                pressed.add(fighter.proj_key)
-
-    return InputState(pressed)
+    SPACING_LO = 80
+    SPACING_HI = 160
 
     # --------------------------------------------------
     # PROJECTILE PREDICTIVE DODGE
@@ -787,11 +683,11 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key, aggression
         if not getattr(proj, "active", True):
             continue
 
-        future_x = proj.rect.centerx + proj.direction * PREDICT * 10
+        future_x = proj.rect.centerx + proj.direction * PREDICT * 6
         pdx = future_x - fighter.rect.centerx
         pdy = proj.rect.centery - fighter.rect.centery
 
-        if abs(pdx) < 170 and abs(pdy) < 60:
+        if abs(pdx) < 150 and abs(pdy) < 60:
             if proj.direction > 0:
                 danger_right = True
             else:
@@ -800,180 +696,106 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key, aggression
             if fighter.on_ground and random.random() < DODGE:
                 danger_jump = True
 
-    # jump dodge
     if danger_jump and fighter.on_ground:
         pressed.add(jump_key)
-
-    # sidestep
     if danger_left:
         pressed.add(right_key)
     if danger_right:
         pressed.add(left_key)
 
+    dodging = danger_left or danger_right
+
     # --------------------------------------------------
-    # HUMAN-LIKE FAKEOUTS + WALK STOPS
+    # FAKEOUTS
     # --------------------------------------------------
-    # randomly stop for 1–3 frames to look human
     if random.random() < FAKEOUT:
-        return InputState(set())  # do nothing for a frame
-
-    # tiny walk forward then stop
-    if random.random() < (FAKEOUT * 0.5):
-        pressed.add(right_key if moving_toward else left_key)
-        return InputState(pressed)
+        return InputState(set())
 
     # --------------------------------------------------
-    # JUMP-ARC PREDICTION (NEW)
+    # NEUTRAL MOVEMENT
     # --------------------------------------------------
-    # if opponent is rising into a jump arc → AI pre-moves to intercept or avoid
-    if opponent.vel_y < -6:  # jumping upward
-        # if opponent is jumping TOWARD AI → backstep or anti-air
-        if moving_toward:
-            pressed.add(left_key if moving_toward else right_key)
-        # 50% chance do a jump-away
-        if fighter.on_ground and random.random() < 0.35:
-            pressed.add(jump_key)
+    if not dodging:
 
-    # --------------------------------------------------
-    # ANTI-CORNER ESCAPE
-    # --------------------------------------------------
-    left_corner = fighter.rect.left < 35
-    right_corner = fighter.rect.right > WIDTH - 35
-
-    if left_corner:
-        pressed.add(right_key)
-        if fighter.on_ground:
-            pressed.add(jump_key)
-
-    if right_corner:
-        pressed.add(left_key)
-        if fighter.on_ground:
-            pressed.add(jump_key)
-
-    # --------------------------------------------------
-    # NEUTRAL MOVEMENT + FOOTSI
-    # --------------------------------------------------
-    if not (danger_left or danger_right):
-
-        # too far → approach
         if distance > SPACING_HI:
-            pressed.add(right_key if moving_toward else left_key)
+            pressed.add(right_key if moving_right else left_key)
 
-        # too close → backstep
         elif distance < SPACING_LO:
-            pressed.add(left_key if moving_toward else right_key)
+            pressed.add(left_key if moving_right else right_key)
 
         else:
-            # shuffle to avoid freezing
             if random.random() < SHUFFLE:
-                pressed.add(right_key if moving_toward else left_key)
+                pressed.add(right_key if moving_right else left_key)
             elif random.random() < SHUFFLE:
-                pressed.add(left_key if moving_toward else right_key)
+                pressed.add(left_key if moving_right else right_key)
 
-        # try jumping out of pressure
-        if (left_corner or right_corner) and fighter.on_ground:
-            pressed.add(jump_key)
+        # corner escape
+        if fighter.rect.left < 30:
+            pressed.add(right_key)
+            if fighter.on_ground:
+                pressed.add(jump_key)
+
+        if fighter.rect.right > WIDTH - 30:
+            pressed.add(left_key)
+            if fighter.on_ground:
+                pressed.add(jump_key)
+
+        # corner trap
+        if CORNER_TRAP:
+            if opponent.rect.left < 50:
+                pressed.add(right_key)
+            if opponent.rect.right > WIDTH - 50:
+                pressed.add(left_key)
 
     # --------------------------------------------------
-    # TRUE COMBO CHAINING (NEW)
+    # ANTI-AIR
     # --------------------------------------------------
-    # combo memory system
+    if opponent.vel_y < -5:
+        if random.random() < ANTI_AIR and fighter.attack_cool == 0:
+            pressed.add(fighter.melee_key)
+
+    # --------------------------------------------------
+    # WHIFF PUNISH
+    # --------------------------------------------------
+    if WHIFF_PUNISH and opponent.attack_cool > 0 and distance < 120:
+        pressed.add(fighter.melee_key)
+
+    # --------------------------------------------------
+    # COMBO SYSTEM
+    # --------------------------------------------------
     if not hasattr(fighter, "combo_step"):
         fighter.combo_step = 0
 
-    in_combo_range = distance < 90
-
-    if in_combo_range and fighter.attack_cool == 0:
-        combo_roll = random.random()
+    if distance < 90 and fighter.attack_cool == 0:
+        r = random.random()
 
         if fighter.combo_step == 0:
-            if combo_roll < MELEE:
+            if r < MELEE:
                 pressed.add(fighter.melee_key)
                 fighter.combo_step = 1
 
         elif fighter.combo_step == 1:
-            if combo_roll < COMBO:
+            if r < COMBO:
                 pressed.add(fighter.melee_key)
                 fighter.combo_step = 2
             else:
                 fighter.combo_step = 0
 
-        elif fighter.combo_step == 2:
-            if combo_roll < COMBO:
+        else:
+            if r < COMBO:
                 pressed.add(fighter.melee_key)
-                fighter.combo_step = 0  # finish combo
-            else:
-                fighter.combo_step = 0
+            fighter.combo_step = 0
 
-    # reset combo if too far
     if distance > 120:
         fighter.combo_step = 0
 
     # --------------------------------------------------
-    # PROJECTILE THROW DECISION
+    # PROJECTILE THROW
     # --------------------------------------------------
     if distance > 150 and fighter.proj_cool == 0 and fighter.attack_cool == 0:
-        if random.random() < THROW and not (danger_left or danger_right):
+        if random.random() < THROW and not dodging:
             pressed.add(fighter.proj_key)
 
     return InputState(pressed)
-
-# WHIFF PUNISH DETECTION
-if (diff in ["bigboy", "doumi gang"]) and WHIFF_PUNISH:
-    if opponent.state == "attack" and opponent.frame >= len(opponent.attack_frames) - 2:
-        if distance < 120 and fighter.attack_cool == 0:
-            pressed.add(fighter.melee_key)
-
-
-# CORNER TRAP BEHAVIOR
-if CORNER_TRAP:
-    opp_left_corner  = opponent.rect.left < 40
-    opp_right_corner = opponent.rect.right > WIDTH - 40
-
-    if opp_left_corner or opp_right_corner:
-        # walk forward to keep them trapped
-        pressed.add(right_key if moving_toward else left_key)
-
-    # pressure with constant jabs
-    if fighter.attack_cool == 0 and random.random() < 0.60:
-        pressed.add(fighter.melee_key)
-
-# throw bottles from distance
-if distance > 150 and fighter.proj_cool == 0:
-    if random.random() < THROW_CHANCE:
-        pressed.add(fighter.proj_key)
-
-# RETURN MUST BE OUTSIDE ALL IF BLOCKS
-return InputState(pressed)
-
-
-
-# FAST DASH-IN FOR HIGH DIFFICULTY
-if diff in ["bigboy", "doumi gang"]:
-    if distance > 120 and random.random() < 0.35:
-        for _ in range(2):  # small double-step
-            pressed.add(right_key if moving_toward else left_key)
-
-# ANTI-AIR SYSTEM
-if opponent.vel_y < -6:  # opponent rising
-    if random.random() < ANTI_AIR:
-        # intercept by punching early
-        if fighter.attack_cool == 0:
-            pressed.add(fighter.melee_key)
-
-# PREDODGE: AI dodges before projectile reaches
-if diff in ["bigboy", "doumi gang"]:
-    for proj in global_projectiles:
-        predicted_x = proj.rect.x + proj.direction * PREDICT * 6
-        if abs(predicted_x - fighter.rect.x) < 110:
-            # dash left or right BEFORE hit
-            if proj.direction > 0:
-                pressed.add(left_key)
-            else:
-                pressed.add(right_key)
-
-            if fighter.on_ground and random.random() < 0.45:
-                pressed.add(jump_key)
 
 
 # ----------------------------------------------------------
@@ -1685,7 +1507,6 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
-
 
 
 
