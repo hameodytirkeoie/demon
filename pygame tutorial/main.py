@@ -342,7 +342,7 @@ class Bottle:
             surf.blit(self.img, (self.x, self.y))
 
 # ----------------------------------------------------------
-# FIGHTER CLASS (FINAL, CLEAN, WORKING)
+# FIGHTER CLASS
 # ----------------------------------------------------------
 class Fighter:
     def __init__(self, x, folder, idle, walk, attack, hit, win, flip=False,
@@ -363,15 +363,14 @@ class Fighter:
 
         # AI fields
         self.combo_step = 0
-        self.last_hit_timer = 0
 
-        # Facing direction
+        # Facing
         self.facing_left = flip
         self.folder = folder
 
-        # -------------------------------
+        # ------------------------------------------------------
         # DASH SYSTEM
-        # -------------------------------
+        # ------------------------------------------------------
         self.last_left_tap = 0
         self.last_right_tap = 0
         self.prev_left_down = False
@@ -382,31 +381,29 @@ class Fighter:
         self.dash_dir = 0
         self.double_tap_window = 200  # ms
 
-        # -------------------------------
-        # LOAD FRAMES
-        # -------------------------------
+        # Load sprite frames
         def load_frames(names):
             base = [load_sprite(folder, f, False) for f in names]
-            flipd = [pygame.transform.flip(img, True, False) for img in base]
-            return base, flipd
+            flipped = [pygame.transform.flip(img, True, False) for img in base]
+            return base, flipped
 
-        self.idle_frames, self.idle_frames_flipped = load_frames(idle)
-        self.walk_frames, self.walk_frames_flipped = load_frames(walk)
-        self.attack_frames, self.attack_frames_flipped = load_frames(attack)
-        self.hit_frames, self.hit_frames_flipped = load_frames(hit)
-        self.win_frames, self.win_frames_flipped = load_frames(win)
+        self.idle_frames, self.idle_flipped = load_frames(idle)
+        self.walk_frames, self.walk_flipped = load_frames(walk)
+        self.attack_frames, self.attack_flipped = load_frames(attack)
+        self.hit_frames, self.hit_flipped = load_frames(hit)
+        self.win_frames, self.win_flipped = load_frames(win)
 
-        # Animation state
+        # Animation
         self.state = "idle"
         self.frame = 0
         self.counter = 0
         self.idle_speed = 15
 
-        # Position
+        # Collider
         self.rect = self.idle_frames[0].get_rect()
         self.rect.midbottom = (x, GROUND_Y)
 
-        # Cooldowns / attacks
+        # Combat
         self.attack_cool = 0
         self.proj_cool = 0
         self.just_shot = False
@@ -418,27 +415,26 @@ class Fighter:
         self.hit_timer = 0
         self.win_timer = 0
 
-        # First image
-        self.image = (
-            self.idle_frames_flipped[0] if self.facing_left else self.idle_frames[0]
-        )
+        # Current image
+        self.image = self.idle_frames[0]
 
-    # ----------------------------------------------------------
-    # DOUBLE TAP DASH CHECK
-    # ----------------------------------------------------------
+    # ------------------------------------------------------
+    # DOUBLE TAP DASH
+    # ------------------------------------------------------
     def check_dash(self, keys, left, right):
         now = pygame.time.get_ticks()
+
         left_down = keys[left]
         right_down = keys[right]
 
-        # Left double tap
+        # LEFT DOUBLE TAP
         if left_down and not self.prev_left_down:
             if now - self.last_left_tap <= self.double_tap_window:
                 self.dash_time = 10
                 self.dash_dir = -1
             self.last_left_tap = now
 
-        # Right double tap
+        # RIGHT DOUBLE TAP
         if right_down and not self.prev_right_down:
             if now - self.last_right_tap <= self.double_tap_window:
                 self.dash_time = 10
@@ -448,9 +444,9 @@ class Fighter:
         self.prev_left_down = left_down
         self.prev_right_down = right_down
 
-    # ----------------------------------------------------------
-    # SET HIT / WIN
-    # ----------------------------------------------------------
+    # ------------------------------------------------------
+    # HIT / WIN STATES
+    # ------------------------------------------------------
     def set_hit(self):
         self.state = "hit"
         self.frame = 0
@@ -461,9 +457,9 @@ class Fighter:
         self.frame = 0
         self.win_timer = 999
 
-    # ----------------------------------------------------------
-    # UPDATE (MOVEMENT, JUMP, ATTACK)
-    # ----------------------------------------------------------
+    # ------------------------------------------------------
+    # UPDATE
+    # ------------------------------------------------------
     def update(self, keys, left, right, jump, opponent):
 
         # Face opponent
@@ -472,54 +468,67 @@ class Fighter:
 
         # Win animation
         if self.win_timer > 0:
-            self.animate(self.win_frames, self.win_frames_flipped, 12)
+            self.animate(self.win_frames, self.win_flipped, 12)
             return
 
         # Hit animation
         if self.hit_timer > 0:
             self.hit_timer -= 1
-            self.animate(self.hit_frames, self.hit_frames_flipped, 6)
+            self.animate(self.hit_frames, self.hit_flipped, 6)
             return
 
-        moving = False
         self.just_shot = False
+        moving = False
 
-        # DASH
-        self.check_dash(keys, left, right)
+        # --------------------------------------------------
+        # HANDLE DASH (but allow AI override)
+        # --------------------------------------------------
+        if not hasattr(self, "_ai_forced_dash") or not self._ai_forced_dash:
+            self.check_dash(keys, left, right)
+
         dash_applied = False
 
         if self.dash_time > 0:
-            dash_vel = self.dash_speed
+            speed = self.dash_speed
             self.dash_time -= 1
 
             if self.dash_dir == -1:
-                self.rect.x -= dash_vel
-                self.vel_x = -dash_vel
+                self.rect.x -= speed
+                self.vel_x = -speed
                 moving = True
                 dash_applied = True
 
             elif self.dash_dir == 1:
-                self.rect.x += dash_vel
-                self.vel_x = dash_vel
+                self.rect.x += speed
+                self.vel_x = speed
                 moving = True
                 dash_applied = True
 
-        # NORMAL MOVE
+        else:
+            self.dash_dir = 0  # reset
+
+        # --------------------------------------------------
+        # NORMAL MOVEMENT
+        # --------------------------------------------------
         if not dash_applied:
             self.vel_x = 0
+
             if keys[left]:
                 self.rect.x -= self.velocity
                 self.vel_x = -self.velocity
                 moving = True
+
             if keys[right]:
                 self.rect.x += self.velocity
                 self.vel_x = self.velocity
                 moving = True
 
-        # Screen bounds
+        # Clamp to screen
         self.rect.x = max(0, min(self.rect.x, WIDTH - self.rect.width))
 
+        # --------------------------------------------------
         # JUMP
+        # --------------------------------------------------
         if keys[jump] and self.on_ground:
             self.vel_y = -12
             self.on_ground = False
@@ -532,20 +541,24 @@ class Fighter:
             self.vel_y = 0
             self.on_ground = True
 
-        # ATTACK
-        if self.attack_cool > 0: self.attack_cool -= 1
-        if self.proj_cool > 0: self.proj_cool -= 1
+        # --------------------------------------------------
+        # ATTACKING
+        # --------------------------------------------------
+        if self.attack_cool > 0:
+            self.attack_cool -= 1
+        if self.proj_cool > 0:
+            self.proj_cool -= 1
 
         # MELEE
         if keys[self.melee_key] and self.attack_cool == 0:
-            self.attack_cool = 18
             self.state = "attack"
+            self.attack_cool = 18
 
             if self.rect.colliderect(opponent.rect):
                 opponent.health -= 10
                 opponent.set_hit()
 
-        # PROJECTILE
+        # PROJECTILE CHARGE
         elif keys[self.proj_key] and self.attack_cool == 0 and self.proj_cool == 0:
             if not self.proj_charging:
                 self.proj_charging = True
@@ -554,48 +567,54 @@ class Fighter:
             self.proj_charge = min(self.proj_charge + 1, self.max_proj_charge)
             self.state = "attack"
 
+        # RELEASE PROJECTILE
         elif self.proj_charging:
             ratio = self.proj_charge / self.max_proj_charge
             self.just_shot_power = 0.5 + ratio
+
             self.attack_cool = 20
             self.proj_cool = 60
             self.just_shot = True
+
             self.proj_charging = False
             self.proj_charge = 0
+
             self.state = "attack"
 
         else:
             self.state = "walk" if moving else "idle"
 
+        # --------------------------------------------------
         # ANIMATION
+        # --------------------------------------------------
         if self.state == "idle":
-            self.animate(self.idle_frames, self.idle_frames_flipped, self.idle_speed)
+            self.animate(self.idle_frames, self.idle_flipped, self.idle_speed)
         elif self.state == "walk":
-            self.animate(self.walk_frames, self.walk_frames_flipped, 8)
+            self.animate(self.walk_frames, self.walk_flipped, 8)
         elif self.state == "attack":
-            self.animate(self.attack_frames, self.attack_frames_flipped, 6)
+            self.animate(self.attack_frames, self.attack_flipped, 6)
 
-    # ----------------------------------------------------------
-    # ANIMATION HANDLER (ONLY ONE!)
-    # ----------------------------------------------------------
-    def animate(self, frames, frames_flipped, speed):
-        frame_list = frames_flipped if self.facing_left else frames
+    # ------------------------------------------------------
+    # ANIMATION FUNCTION
+    # ------------------------------------------------------
+    def animate(self, frames, flipped_frames, speed):
+        fr = flipped_frames if self.facing_left else frames
 
         self.counter += 1
         if self.counter >= speed:
             self.counter = 0
             self.frame += 1
 
-        if self.frame >= len(frame_list):
+        if self.frame >= len(fr):
             self.frame = 0
             if self.state == "attack":
                 self.state = "idle"
 
-        self.image = frame_list[self.frame]
+        self.image = fr[self.frame]
 
-    # ----------------------------------------------------------
-    # DRAW (ONLY ONE!)
-    # ----------------------------------------------------------
+    # ------------------------------------------------------
+    # DRAW
+    # ------------------------------------------------------
     def draw(self, surf):
         surf.blit(self.image, self.rect.topleft)
 
@@ -766,6 +785,7 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key, aggression
     # ----------------------------------------
     # CORNER ESCAPE / PRESSURE
     # ----------------------------------------
+
     left_corner = fighter.rect.left < 25
     right_corner = fighter.rect.right > WIDTH - 25
     opp_left_corner = opponent.rect.left < 35
