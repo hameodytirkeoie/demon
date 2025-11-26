@@ -1162,7 +1162,11 @@ def main_menu():
         pygame.display.flip()
         clock.tick(60)
 
-def options_menu()
+def options_menu():
+    selection = 0
+    header = menu_font.render("Options", True, WHITE)
+    header_rect = header.get_rect(center=(WIDTH // 2, 90))
+
 def post_game_menu(champion_label):
     replay_surf = button_font.render("Replay", True, WHITE)
     exit_surf = button_font.render("Exit", True, WHITE)
