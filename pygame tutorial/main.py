@@ -324,6 +324,8 @@ class Fighter:
 
         self.health = 100
         self.velocity = 5
+        self.vel_x = 0
+
 
         # Track desired facing, but keep both orientations available so fighters
         # always turn toward their opponent instead of staring off-screen.
@@ -342,15 +344,17 @@ class Fighter:
         self.win_frames, self.win_frames_flipped         = load_frames(win)
 
         # Animation state
+
         self.state = "idle"
         self.frame = 0
         self.counter = 0
-        self.idle_speed = 15  # slower idle
+        self.idle_speed = 15
 
         self.rect = self.idle_frames[0].get_rect()
         self.rect.midbottom = (x, GROUND_Y)
 
         self.vel_y = 0
+        self.vel_x = 0
         self.gravity = 1.0
         self.on_ground = True
 
@@ -361,9 +365,15 @@ class Fighter:
         self.proj_charging = False
         self.proj_charge = 0
         self.max_proj_charge = 45
+
         self.hit_timer = 0
         self.win_timer = 0
         self.ai_charge_frames = 0
+
+        self.combo_step = 0
+        self.last_hit_timer = 0
+
+
                      
         # Seed the initial sprite with the correct facing so countdown screens
         # render the fighter looking toward their opponent instead of turning
@@ -399,16 +409,22 @@ class Fighter:
         moving = False
 
         # movement
+        # movement
+        self.vel_x = 0  # reset horizontal velocity each frame
+
         if keys[left]:
             self.rect.x -= self.velocity
+            self.vel_x = -self.velocity
             moving = True
+
         if keys[right]:
             self.rect.x += self.velocity
+            self.vel_x = self.velocity
             moving = True
 
         # keep fighters on screen
         self.rect.x = max(0, min(self.rect.x, WIDTH - self.rect.width))
-        
+
         # jump
         if keys[jump] and self.on_ground:
             self.vel_y = -12
@@ -521,63 +537,126 @@ def create_players():
 
     return p1, p2
 
-
-def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key, aggression=1.0):
-    """Generate simple AI controls so solo players can battle a bot."""
-
+def build_ai_inputs(
+    fighter, opponent, left_key, right_key, jump_key, aggression=1.0
+):
     pressed = set()
     dx = opponent.rect.centerx - fighter.rect.centerx
     distance = abs(dx)
+    move_right = dx > 0
 
-    # Face and advance toward the opponent unless already in striking range.
+    # Always face opponent
     fighter.facing_left = opponent.rect.centerx < fighter.rect.centerx
 
-    # Dynamically adjust spacing: trail when hurt, chase when the opponent is
-    # nearly defeated so fights end decisively instead of stalling at mid-range.
-    preferred = AI_COMFORT_DISTANCE
-    if opponent.health < 30:
-        preferred = max(100, preferred - 30)
-    elif fighter.health + 20 < opponent.health:
-        preferred += 30
+    # ---------------------------
+    # RANGE DEFINITIONS
+    # ---------------------------
+    CLOSE_RANGE = 85          # punch range
+    MID_RANGE = 230           # projectile poke range
+    FAR_RANGE = 350           # chase range
+    TOO_CLOSE = 55            # used for retreat logic
 
-    # Approach or back up to stay in a comfortable range.
-    move_right = dx > 0
-    if distance > preferred + 15:
-        pressed.add(right_key if move_right else left_key)
-    elif distance < preferred - 30:
+    # ---------------------------
+    # RETREAT / AGGRESSION LOGIC
+    # ---------------------------
+    # If AI HP is very low → plays defensive
+    if fighter.health < 25 and distance < TOO_CLOSE:
+        # pull back
         pressed.add(left_key if move_right else right_key)
 
-    # Avoid walking off-screen by ignoring pushes that would move beyond bounds.
+    # If enemy HP is low → play aggressive to secure kill
+    if opponent.health < 30 and distance < FAR_RANGE:
+        aggression = 1.4
+
+    # ---------------------------
+    # PREDICTIVE MOVEMENT ("Smart chase")
+    # ---------------------------
+    if distance > MID_RANGE:
+        # Predict where enemy will be in 10 frames
+        predicted_dx = dx + (opponent.vel_x * 10)
+
+        if predicted_dx > 0:
+            pressed.add(right_key)
+        else:
+            pressed.add(left_key)
+
+    # Maintain pressure at close range
+    elif CLOSE_RANGE < distance < MID_RANGE:
+        if distance > (CLOSE_RANGE + 10):
+            pressed.add(right_key if move_right else left_key)
+
+    # ---------------------------
+    # WALL SAFETY
+    # ---------------------------
     if fighter.rect.left <= 0 and left_key in pressed:
         pressed.remove(left_key)
     if fighter.rect.right >= WIDTH and right_key in pressed:
         pressed.remove(right_key)
 
-    # Hop when the opponent is above the fighter so elevated foes can be reached.
-    if fighter.on_ground and distance < 140 and opponent.rect.bottom <= fighter.rect.bottom - 20:
+    # ---------------------------
+    # DODGE PROJECTILES / JUMP LOGIC
+    # ---------------------------
+    # SIMPLE DODGE:
+    if hasattr(opponent, "projectiles"):
+        for proj in opponent.projectiles:
+            # Projectile approaching fighter horizontally
+            if abs(proj.rect.centery - fighter.rect.centery) < 60:
+                if proj.rect.centerx < fighter.rect.centerx:
+                    # bullet coming from left
+                    pressed.add(right_key)
+                else:
+                    pressed.add(left_key)
+
+            # Jump over ground-level projectile
+            if proj.rect.centery > fighter.rect.centery + 10 and distance < MID_RANGE:
+                if fighter.on_ground:
+                    pressed.add(jump_key)
+
+    # Jump if opponent is above
+    if fighter.on_ground and opponent.rect.bottom < fighter.rect.bottom - 40:
         pressed.add(jump_key)
 
-    # Attack decisions
-    if distance < 100 and fighter.attack_cool == 0:
-        pressed.add(fighter.melee_key)
-        fighter.ai_charge_frames = 0
-    elif fighter.proj_key and fighter.proj_cool == 0 and fighter.attack_cool == 0:
-        long_range = distance > preferred + 20
-        # Only begin charging when there is room to safely throw a bottle; once
-        # charging, hold long enough to boost damage before releasing.
-        if long_range and not fighter.proj_charging:
-            fighter.ai_charge_frames = 0
-            pressed.add(fighter.proj_key)
-        elif fighter.proj_charging:
-            fighter.ai_charge_frames = min(fighter.ai_charge_frames + 1, fighter.max_proj_charge)
-            hold_target = 24 if opponent.health > 40 else 34
-            if fighter.ai_charge_frames < hold_target:
-                pressed.add(fighter.proj_key)
-        else:
-            fighter.ai_charge_frames = 0
-    else:
-        fighter.ai_charge_frames = 0
+    # ---------------------------
+    # COMBAT LOGIC (smart attacks)
+    # ---------------------------
 
+    # CLOSE RANGE → COMBO PUNCH SYSTEM
+    if distance < CLOSE_RANGE and fighter.attack_cool == 0:
+        # 3-stage combo decision
+        if fighter.combo_step == 0:
+            pressed.add(fighter.melee_key)
+            fighter.combo_step = 1
+        elif fighter.combo_step == 1 and fighter.last_hit_timer < 20:
+            pressed.add(fighter.melee_key)
+            fighter.combo_step = 2
+        elif fighter.combo_step == 2 and fighter.last_hit_timer < 28:
+            pressed.add(fighter.melee_key)
+            fighter.combo_step = 0
+        else:
+            # reset combo if failed
+            fighter.combo_step = 0
+
+    # MID RANGE → PROJECTILE POKES
+    elif CLOSE_RANGE < distance < MID_RANGE:
+        if fighter.proj_cool == 0:
+            pressed.add(fighter.proj_key)
+
+    # FAR RANGE → CHARGED PROJECTILES
+    elif distance >= MID_RANGE:
+        if fighter.proj_key:
+            if not fighter.proj_charging:
+                pressed.add(fighter.proj_key)
+                fighter.ai_charge_frames = 0
+            else:
+                fighter.ai_charge_frames += 1
+                # Charge longer if enemy HP is high
+                hold = 18 if opponent.health < 50 else 34
+                if fighter.ai_charge_frames < hold:
+                    pressed.add(fighter.proj_key)
+
+    # ---------------------------
+    # RETURN FINAL INPUTS
+    # ---------------------------
     return InputState(pressed)
 
 # ----------------------------------------------------------
