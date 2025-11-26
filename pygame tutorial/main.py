@@ -585,7 +585,8 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key):
 # ----------------------------------------------------------
 # ----------------------------------------------------------
 # DRAW UI (HEALTH + TIMER)
-# ----------------------------------------------------------def draw_ui(p1, p2, time_left, countdown_text=None, round_score=None, target_wins=None):
+# ----------------------------------------------------------
+def draw_ui(p1, p2, time_left, countdown_text=None, round_score=None, target_wins=None):
     if target_wins is None:
         target_wins = SETTINGS.rounds_to_win
         ratio = max(0, min(1, ratio))
@@ -1235,6 +1236,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
