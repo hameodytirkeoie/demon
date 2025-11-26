@@ -779,64 +779,35 @@ if wall_left:
     pressed.add(right_key)
 elif wall_right:
     pressed.add(left_key)
-            # ----------------------------------------------
-            # NEW: AUTO-ENGAGE (AI won't wait for you)
-            # ----------------------------------------------
-            if diff in ["bigboy", "doumi gang"]:
 
-                # If player stands still → AI pushes in
-                if opponent.vel_x == 0 and opponent.vel_y == 0:
-                    pressed.add(right_key if moving_right else left_key)
+# --------------------------------------------------
+# NEW: AUTO-ENGAGE (AI won't wait for you)
+# --------------------------------------------------
+if diff in ["bigboy", "doumi gang"]:
 
-                    # randomly attack while closing
-                    if distance < 120 and fighter.attack_cool == 0:
-                        if random.random() < 0.45:
-                            pressed.add(fighter.melee_key)
+    # If player stands still → AI pushes in
+    if opponent.vel_x == 0 and opponent.vel_y == 0:
+        pressed.add(right_key if moving_right else left_key)
 
-                # close the distance aggressively
-                if distance > SPACING_LO:
-                    pressed.add(right_key if moving_right else left_key)
+        # randomly attack while closing
+        if distance < 120 and fighter.attack_cool == 0:
+            if random.random() < 0.45:
+                pressed.add(fighter.melee_key)
 
-                # if very close → force scramble
-                if distance < 60:
-                    if random.random() < 0.25:
-                        pressed.add(jump_key)
+    # close the distance aggressively
+    if distance > SPACING_LO:
+        pressed.add(right_key if moving_right else left_key)
 
-                # apply shuffle for unpredictability
-                if random.random() < SHUFFLE:
-                    pressed.add(right_key if moving_right else left_key)
-                elif random.random() < SHUFFLE:
-                    pressed.add(left_key if moving_right else right_key)
+    # if very close → force scramble
+    if distance < 60:
+        if random.random() < 0.25:
+            pressed.add(jump_key)
 
-            else:
-                # ----------------------------------------------
-                # NORMAL AI (less aggressive)
-                # ----------------------------------------------
-                if distance > SPACING_HI:
-                    pressed.add(right_key if moving_right else left_key)
-                elif distance < SPACING_LO:
-                    pressed.add(left_key if moving_right else right_key)
-                else:
-                    # shuffle
-                    if random.random() < SHUFFLE:
-                        pressed.add(right_key if moving_right else left_key)
-                    elif random.random() < SHUFFLE:
-                        pressed.add(left_key if moving_right else right_key)
-
-                # ----------------------------------------------
-                # NORMAL AI (less aggressive)
-                # ----------------------------------------------
-                if distance > SPACING_HI:
-                    pressed.add(right_key if moving_right else left_key)
-                elif distance < SPACING_LO:
-                    pressed.add(left_key if moving_right else right_key)
-                else:
-                    # shuffle
-                    if random.random() < SHUFFLE:
-                        pressed.add(right_key if moving_right else left_key)
-                    elif random.random() < SHUFFLE:
-                        pressed.add(left_key if moving_right else right_key)
-
+    # apply shuffle for unpredictability
+    if random.random() < SHUFFLE:
+        pressed.add(right_key if moving_right else left_key)
+    elif random.random() < SHUFFLE:
+        pressed.add(left_key if moving_right else right_key)
 
     # --------------------------------------------------
     # IMPOSSIBLE CORNER AI (bigboy + doumi gang ONLY)
@@ -1289,44 +1260,57 @@ def options_menu():
 
     AI_MODES = ["normal", "sweaty", "bigboy", "doumi gang"]
 
-    while True:
-for e in pygame.event.get():
-    if e.type == pygame.QUIT:
-        pygame.quit()
-        sys.exit()
+while True:
+    for e in pygame.event.get():
+        if e.type == pygame.QUIT:
+            pygame.quit()
+            sys.exit()
 
-    if e.type == pygame.KEYDOWN:
-        print("=== KEY PRESSED ===", e.key)
-        
-        # 🔥 QUICK START: P1 vs DOUMI GANG AI
-        if e.key in (pygame.K_6, pygame.K_KP6):
-            SETTINGS.ai_difficulty = "doumi gang"
-            return "p1"
+        if e.type == pygame.KEYDOWN:
+            print("=== KEY PRESSED ===", e.key)
 
+            # QUICK START: P1 vs DOUMI GANG AI
+            if e.key in (pygame.K_6, pygame.K_KP6):
+                SETTINGS.ai_difficulty = "doumi gang"
+                return "p1"
 
-                # exit options menu
-                if e.key in (pygame.K_ESCAPE, pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_BACKSPACE):
-                    return
+            # exit options menu
+            if e.key in (pygame.K_ESCAPE, pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_BACKSPACE):
+                return
 
-                # move cursor UP/DOWN
-                if e.key in (pygame.K_UP, pygame.K_w):
-                    selection = (selection - 1) % 5   # NOW 5 OPTIONS
-                if e.key in (pygame.K_DOWN, pygame.K_s):
-                    selection = (selection + 1) % 5
+            # move cursor UP/DOWN
+            if e.key in (pygame.K_UP, pygame.K_w):
+                selection = (selection - 1) % 5
+            if e.key in (pygame.K_DOWN, pygame.K_s):
+                selection = (selection + 1) % 5
 
-                # LEFT ← reduces values
-                if e.key in (pygame.K_LEFT, pygame.K_a):
-                    if selection == 0:
-                        SETTINGS.rounds_to_win = clamp(SETTINGS.rounds_to_win - 1, 1, 5)
-                    elif selection == 1:
-                        SETTINGS.round_time = clamp(SETTINGS.round_time - 15, 30, 120)
-                    elif selection == 2:
-                        SETTINGS.overtime_time = clamp(SETTINGS.overtime_time - 5, 10, 45)
-                    elif selection == 3:
-                        SETTINGS.ai_aggression = round(clamp(SETTINGS.ai_aggression - 0.1, 0.5, 1.6), 1)
-                    elif selection == 4:  # AI DIFFICULTY
-                        idx = AI_MODES.index(SETTINGS.ai_difficulty)
-                        SETTINGS.ai_difficulty = AI_MODES[(idx - 1) % len(AI_MODES)]
+            # LEFT ← reduces values
+            if e.key in (pygame.K_LEFT, pygame.K_a):
+                if selection == 0:
+                    SETTINGS.rounds_to_win = clamp(SETTINGS.rounds_to_win - 1, 1, 5)
+                elif selection == 1:
+                    SETTINGS.round_time = clamp(SETTINGS.round_time - 15, 30, 120)
+                elif selection == 2:
+                    SETTINGS.overtime_time = clamp(SETTINGS.overtime_time - 5, 10, 45)
+                elif selection == 3:
+                    SETTINGS.ai_aggression = round(clamp(SETTINGS.ai_aggression - 0.1, 0.5, 1.6), 1)
+                elif selection == 4:
+                    idx = AI_MODES.index(SETTINGS.ai_difficulty)
+                    SETTINGS.ai_difficulty = AI_MODES[(idx - 1) % len(AI_MODES)]
+
+            # RIGHT → increases values
+            if e.key in (pygame.K_RIGHT, pygame.K_d):
+                if selection == 0:
+                    SETTINGS.rounds_to_win = clamp(SETTINGS.rounds_to_win + 1, 1, 5)
+                elif selection == 1:
+                    SETTINGS.round_time = clamp(SETTINGS.round_time + 15, 30, 120)
+                elif selection == 2:
+                    SETTINGS.overtime_time = clamp(SETTINGS.overtime_time + 5, 10, 45)
+                elif selection == 3:
+                    SETTINGS.ai_aggression = round(clamp(SETTINGS.ai_aggression + 0.1, 0.5, 1.6), 1)
+                elif selection == 4:
+                    idx = AI_MODES.index(SETTINGS.ai_difficulty)
+                    SETTINGS.ai_difficulty = AI_MODES[(idx + 1) % len(AI_MODES)]
 
                 # RIGHT → increases values
                 if e.key in (pygame.K_RIGHT, pygame.K_d):
@@ -1715,7 +1699,6 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
-
 
 
 
