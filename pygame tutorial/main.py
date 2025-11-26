@@ -342,7 +342,7 @@ class Bottle:
             surf.blit(self.img, (self.x, self.y))
 
 # ----------------------------------------------------------
-# FIGHTER CLASS
+# FIGHTER CLASS (FINAL, CLEAN, WORKING)
 # ----------------------------------------------------------
 class Fighter:
     def __init__(self, x, folder, idle, walk, attack, hit, win, flip=False,
@@ -355,7 +355,7 @@ class Fighter:
         self.health = 100
         self.velocity = 5
 
-        # Track movement
+        # Movement
         self.vel_x = 0
         self.vel_y = 0
         self.gravity = 1.0
@@ -369,11 +369,26 @@ class Fighter:
         self.facing_left = flip
         self.folder = folder
 
-        # Load all frames
+        # -------------------------------
+        # DASH SYSTEM
+        # -------------------------------
+        self.last_left_tap = 0
+        self.last_right_tap = 0
+        self.prev_left_down = False
+        self.prev_right_down = False
+
+        self.dash_time = 0
+        self.dash_speed = 13
+        self.dash_dir = 0
+        self.double_tap_window = 200  # ms
+
+        # -------------------------------
+        # LOAD FRAMES
+        # -------------------------------
         def load_frames(names):
-            base_frames = [load_sprite(folder, f, False) for f in names]
-            flipped_frames = [pygame.transform.flip(img, True, False) for img in base_frames]
-            return base_frames, flipped_frames
+            base = [load_sprite(folder, f, False) for f in names]
+            flipd = [pygame.transform.flip(img, True, False) for img in base]
+            return base, flipd
 
         self.idle_frames, self.idle_frames_flipped = load_frames(idle)
         self.walk_frames, self.walk_frames_flipped = load_frames(walk)
@@ -387,10 +402,11 @@ class Fighter:
         self.counter = 0
         self.idle_speed = 15
 
+        # Position
         self.rect = self.idle_frames[0].get_rect()
         self.rect.midbottom = (x, GROUND_Y)
 
-        # Cooldowns / combat
+        # Cooldowns / attacks
         self.attack_cool = 0
         self.proj_cool = 0
         self.just_shot = False
@@ -398,19 +414,42 @@ class Fighter:
         self.proj_charging = False
         self.proj_charge = 0
         self.max_proj_charge = 45
+
         self.hit_timer = 0
         self.win_timer = 0
-        self.ai_charge_frames = 0
 
-        # Initial displayed image
+        # First image
         self.image = (
-            self.idle_frames_flipped[0]
-            if self.facing_left
-            else self.idle_frames[0]
+            self.idle_frames_flipped[0] if self.facing_left else self.idle_frames[0]
         )
 
     # ----------------------------------------------------------
-    # HIT & WIN STATES
+    # DOUBLE TAP DASH CHECK
+    # ----------------------------------------------------------
+    def check_dash(self, keys, left, right):
+        now = pygame.time.get_ticks()
+        left_down = keys[left]
+        right_down = keys[right]
+
+        # Left double tap
+        if left_down and not self.prev_left_down:
+            if now - self.last_left_tap <= self.double_tap_window:
+                self.dash_time = 10
+                self.dash_dir = -1
+            self.last_left_tap = now
+
+        # Right double tap
+        if right_down and not self.prev_right_down:
+            if now - self.last_right_tap <= self.double_tap_window:
+                self.dash_time = 10
+                self.dash_dir = 1
+            self.last_right_tap = now
+
+        self.prev_left_down = left_down
+        self.prev_right_down = right_down
+
+    # ----------------------------------------------------------
+    # SET HIT / WIN
     # ----------------------------------------------------------
     def set_hit(self):
         self.state = "hit"
@@ -423,11 +462,11 @@ class Fighter:
         self.win_timer = 999
 
     # ----------------------------------------------------------
-    # UPDATE (MOVEMENT, JUMP, ATTACK, ANIMATION)
+    # UPDATE (MOVEMENT, JUMP, ATTACK)
     # ----------------------------------------------------------
     def update(self, keys, left, right, jump, opponent):
 
-        # Always face opponent
+        # Face opponent
         if opponent:
             self.facing_left = opponent.rect.centerx < self.rect.centerx
 
@@ -442,30 +481,45 @@ class Fighter:
             self.animate(self.hit_frames, self.hit_frames_flipped, 6)
             return
 
-        self.just_shot = False
         moving = False
+        self.just_shot = False
 
-        # ------------------------------------------
-        # MOVEMENT (updated with vel_x tracking)
-        # ------------------------------------------
-        self.vel_x = 0
+        # DASH
+        self.check_dash(keys, left, right)
+        dash_applied = False
 
-        if keys[left]:
-            self.rect.x -= self.velocity
-            self.vel_x = -self.velocity
-            moving = True
+        if self.dash_time > 0:
+            dash_vel = self.dash_speed
+            self.dash_time -= 1
 
-        if keys[right]:
-            self.rect.x += self.velocity
-            self.vel_x = self.velocity
-            moving = True
+            if self.dash_dir == -1:
+                self.rect.x -= dash_vel
+                self.vel_x = -dash_vel
+                moving = True
+                dash_applied = True
 
-        # Keep fighter on screen
+            elif self.dash_dir == 1:
+                self.rect.x += dash_vel
+                self.vel_x = dash_vel
+                moving = True
+                dash_applied = True
+
+        # NORMAL MOVE
+        if not dash_applied:
+            self.vel_x = 0
+            if keys[left]:
+                self.rect.x -= self.velocity
+                self.vel_x = -self.velocity
+                moving = True
+            if keys[right]:
+                self.rect.x += self.velocity
+                self.vel_x = self.velocity
+                moving = True
+
+        # Screen bounds
         self.rect.x = max(0, min(self.rect.x, WIDTH - self.rect.width))
 
-        # ------------------------------------------
-        # JUMPING
-        # ------------------------------------------
+        # JUMP
         if keys[jump] and self.on_ground:
             self.vel_y = -12
             self.on_ground = False
@@ -478,50 +532,42 @@ class Fighter:
             self.vel_y = 0
             self.on_ground = True
 
-        # ------------------------------------------
-        # ATTACKING
-        # ------------------------------------------
-        if self.attack_cool > 0:
-            self.attack_cool -= 1
-        if self.proj_cool > 0:
-            self.proj_cool -= 1
+        # ATTACK
+        if self.attack_cool > 0: self.attack_cool -= 1
+        if self.proj_cool > 0: self.proj_cool -= 1
 
         # MELEE
         if keys[self.melee_key] and self.attack_cool == 0:
             self.attack_cool = 18
             self.state = "attack"
+
             if self.rect.colliderect(opponent.rect):
                 opponent.health -= 10
                 opponent.set_hit()
 
         # PROJECTILE
-        elif self.proj_key and self.attack_cool == 0 and self.proj_cool == 0:
-            if keys[self.proj_key]:
-                if not self.proj_charging:
-                    self.proj_charging = True
-                    self.proj_charge = 0
-                self.proj_charge = min(self.proj_charge + 1, self.max_proj_charge)
-                self.state = "attack"
-
-            elif self.proj_charging:
-                charge_ratio = self.proj_charge / self.max_proj_charge
-                self.just_shot_power = 0.5 + charge_ratio
-                self.attack_cool = 20
-                self.proj_cool = 60
-                self.state = "attack"
-                self.just_shot = True
-                self.proj_charging = False
+        elif keys[self.proj_key] and self.attack_cool == 0 and self.proj_cool == 0:
+            if not self.proj_charging:
+                self.proj_charging = True
                 self.proj_charge = 0
 
-            else:
-                self.state = "walk" if moving else "idle"
+            self.proj_charge = min(self.proj_charge + 1, self.max_proj_charge)
+            self.state = "attack"
+
+        elif self.proj_charging:
+            ratio = self.proj_charge / self.max_proj_charge
+            self.just_shot_power = 0.5 + ratio
+            self.attack_cool = 20
+            self.proj_cool = 60
+            self.just_shot = True
+            self.proj_charging = False
+            self.proj_charge = 0
+            self.state = "attack"
 
         else:
             self.state = "walk" if moving else "idle"
 
-        # ------------------------------------------
         # ANIMATION
-        # ------------------------------------------
         if self.state == "idle":
             self.animate(self.idle_frames, self.idle_frames_flipped, self.idle_speed)
         elif self.state == "walk":
@@ -530,27 +576,28 @@ class Fighter:
             self.animate(self.attack_frames, self.attack_frames_flipped, 6)
 
     # ----------------------------------------------------------
-    # ANIMATION HANDLER
+    # ANIMATION HANDLER (ONLY ONE!)
     # ----------------------------------------------------------
-    def animate(self, base_frames, flipped_frames, speed):
-        frames = flipped_frames if self.facing_left else base_frames
+    def animate(self, frames, frames_flipped, speed):
+        frame_list = frames_flipped if self.facing_left else frames
 
         self.counter += 1
         if self.counter >= speed:
             self.counter = 0
             self.frame += 1
 
-        if self.frame >= len(frames):
+        if self.frame >= len(frame_list):
             self.frame = 0
             if self.state == "attack":
                 self.state = "idle"
 
-        self.image = frames[self.frame]
+        self.image = frame_list[self.frame]
 
+    # ----------------------------------------------------------
+    # DRAW (ONLY ONE!)
+    # ----------------------------------------------------------
     def draw(self, surf):
         surf.blit(self.image, self.rect.topleft)
-
-
 
 # ----------------------------------------------------------
 # CREATE PLAYERS
@@ -845,6 +892,87 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key, aggression
         if CORNER_TRAP and opp_cornered and 130 < distance < 260:
             if random.random() < THROW * 0.8:
                 pressed.add(fighter.proj_key)
+
+    # ----------------------------------------------------------
+    # ADVANCED DASH MIXUPS (bigboy + doumi gang only)
+    # ----------------------------------------------------------
+    sweaty_mode = diff in ["bigboy", "doumi gang"]
+    can_dash = hasattr(fighter, "dash_time") and fighter.dash_time == 0
+
+    if sweaty_mode:
+
+        # -------------------------
+        # 1. DASH FEINT
+        # -------------------------
+        if can_dash and 90 < distance < 240:
+            if random.random() < 0.18:
+                fighter.dash_dir = 1 if moving_right else -1
+                fighter.dash_time = 3  # tiny microdash feint
+
+        # -------------------------
+        # 2. SHIMMY MIXUP 
+        # dash in -> dash back -> punish
+        # -------------------------
+        if can_dash and distance < 120 and opponent.state != "attack":
+            if random.random() < 0.14:
+                # dash in
+                fighter.dash_dir = 1 if moving_right else -1
+                fighter.dash_time = 5
+
+                # dash back
+                if random.random() < 0.7:
+                    fighter.dash_dir = -1 if moving_right else 1
+                    fighter.dash_time = 5
+
+        # -------------------------
+        # 3. WAVEDASH (Tekken-style)
+        # -------------------------
+        if can_dash and fighter.on_ground:
+            if random.random() < 0.10:
+                # dash forward repeatedly
+                for _ in range(random.randint(2, 4)):
+                    fighter.dash_dir = 1 if moving_right else -1
+                    fighter.dash_time = 5
+
+        # -------------------------
+        # 4. DASH → THROW MIXUP
+        # -------------------------
+        if can_dash and distance < 85:
+            if random.random() < 0.25:
+                fighter.dash_dir = 1 if moving_right else -1
+                fighter.dash_time = 6
+
+                if fighter.attack_cool == 0:
+                    pressed.add(fighter.melee_key)  # throw in your game
+
+        # -------------------------
+        # 5. CROSS-UNDER DASH 
+        # (under your jump arc)
+        # -------------------------
+        if can_dash and opponent.vel_y < -3 and distance < 110:
+            if random.random() < 0.20:
+                fighter.dash_dir = 1 if not moving_right else -1
+                fighter.dash_time = 8
+
+        # -------------------------
+        # 6. MICRODASH → JUMP-IN
+        # -------------------------
+        if can_dash and distance < 160:
+            if random.random() < 0.22:
+                fighter.dash_dir = 1 if moving_right else -1
+                fighter.dash_time = 4
+                pressed.add(jump_key)
+
+        # -------------------------
+        # 7. BACKDASH → WHIFF PUNISH
+        # -------------------------
+        if can_dash and opponent.state == "attack":
+            if random.random() < 0.28:
+                fighter.dash_dir = -1 if moving_right else 1
+                fighter.dash_time = 6
+
+            if random.random() < 0.40:
+                pressed.add(fighter.melee_key)
 
     return InputState(pressed)
 # ----------------------------------------------------------
