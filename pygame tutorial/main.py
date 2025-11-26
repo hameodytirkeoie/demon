@@ -522,7 +522,7 @@ def create_players():
     return p1, p2
 
 
-def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key):
+def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key, aggression=1.0):
     """Generate simple AI controls so solo players can battle a bot."""
 
     pressed = set()
@@ -589,31 +589,6 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key):
 def draw_ui(p1, p2, time_left, countdown_text=None, round_score=None, target_wins=None):
     if target_wins is None:
         target_wins = SETTINGS.rounds_to_win
-        ratio = max(0, min(1, ratio))
-
-        frame_w, frame_h = bg.get_size()
-        bar_w = int(frame_w * 0.62)
-        bar_h = max(16, int(frame_h * 0.12))
-
-        # Anchor the bar higher within the HUD so it sits inside the banner
-        # area, matching the reference layout even as the frame is resized.
-        bar_x = x + frame_w - bar_w - 42
-        bar_y = y + int(frame_h * 0.68)
-        track_rect = pygame.Rect(bar_x, bar_y, bar_w, bar_h)
-
-        screen.blit(bg, (x, y))
-
-        if ratio > 0.6:
-            fill_color = (60, 190, 90)
-        elif ratio > 0.3:
-            fill_color = (235, 195, 60)
-        else:
-            fill_color = (215, 80, 80)
-
-        fill_rect = pygame.Rect(track_rect.x, track_rect.y, int(track_rect.w * ratio), track_rect.h)
-        pygame.draw.rect(screen, fill_color, fill_rect, border_radius=4)
-        highlight = pygame.Rect(fill_rect.x + 3, fill_rect.y + 3, max(0, fill_rect.w - 6), max(2, bar_h // 3))
-        pygame.draw.rect(screen, (200, 255, 200), highlight, border_radius=3)
 
     def pick_frame(frames, health):
         if not frames:
@@ -633,14 +608,24 @@ def draw_ui(p1, p2, time_left, countdown_text=None, round_score=None, target_win
 
         return frames[0]
 
+    # ------------------------------------------------------
+    # CUSTOM HUD PORTRAIT RENDERING
+    # ------------------------------------------------------
     if HUD_FRAMES_P1 and HUD_FRAMES_P2:
         p1_frame = pick_frame(HUD_FRAMES_P1, p1.health)
         p2_frame = pick_frame(HUD_FRAMES_P2, p2.health)
 
+        # Draw Player 1 HUD Portrait
         if p1_frame:
-            draw_hud(p1_frame, 10, 10, 1)
+            screen.blit(p1_frame, (10, 10))
+
+        # Draw Player 2 HUD Portrait
         if p2_frame:
-            draw_hud(p2_frame, WIDTH - p2_frame.get_width() - 10, 10, 1)
+            screen.blit(p2_frame, (WIDTH - p2_frame.get_width() - 10, 10))
+
+    # ------------------------------------------------------
+    # FALLBACK: HEALTH BARS
+    # ------------------------------------------------------
     else:
         bar_w = 320
         bar_h = 22
@@ -662,7 +647,7 @@ def draw_ui(p1, p2, time_left, countdown_text=None, round_score=None, target_win
             track_rect = base_rect.inflate(8, 6)
             pygame.draw.rect(screen, (40, 40, 60), track_rect, border_radius=8)
 
-            # Health color transitions from red -> amber -> green
+            # Health color transitions from green → yellow → red
             if ratio > 0.6:
                 fill_color = (40, 200, 120)
             elif ratio > 0.3:
@@ -672,11 +657,36 @@ def draw_ui(p1, p2, time_left, countdown_text=None, round_score=None, target_win
 
             fill_rect = pygame.Rect(base_rect.x, base_rect.y, int(bar_w * ratio), bar_h)
             pygame.draw.rect(screen, fill_color, fill_rect, border_radius=6)
+
             highlight = pygame.Rect(fill_rect.x + 4, fill_rect.y + 3, max(0, fill_rect.w - 8), 6)
             pygame.draw.rect(screen, (255, 255, 255), highlight, border_radius=4)
 
         draw_bar(18, 18, p1.health / 100)
         draw_bar(WIDTH - bar_w - 18, 18, p2.health / 100)
+
+    # ------------------------------------------------------
+    # TIMER RENDERING
+    # ------------------------------------------------------
+    timer_rect = pygame.Rect(WIDTH // 2 - 70, 12, 140, 48)
+    timer_label = countdown_text if countdown_text is not None else str(time_left)
+    timer_surface = render_pixel_text(timer_label.rjust(2, " "), WHITE, 3)
+    text_pos = timer_surface.get_rect(center=(timer_rect.centerx, timer_rect.y + timer_rect.h - 20))
+    screen.blit(timer_surface, text_pos)
+
+    # ------------------------------------------------------
+    # ROUND SCORE
+    # ------------------------------------------------------
+    if round_score is not None:
+        p1_score, p2_score = round_score
+        score_text = f"Rounds  P1: {p1_score}/{target_wins}  |  P2: {p2_score}/{target_wins}"
+        score_surface = ui_font.render(score_text, True, WHITE)
+        score_rect = score_surface.get_rect(center=(WIDTH // 2, timer_rect.bottom + 20))
+
+        score_shadow = score_surface.copy()
+        score_shadow.fill((0, 0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+
+        screen.blit(score_shadow, score_rect.move(2, 2))
+        screen.blit(score_surface, score_rect)
 
     # Timer panel
     timer_rect = pygame.Rect(WIDTH // 2 - 70, 12, 140, 48)
@@ -705,6 +715,24 @@ controls_font = load_font(["dejavusans", "arial", "freesansbold"], 32, bold=True
 ui_font = load_font(["dejavusansmono", "consolas", "freesansbold"], 28)
 button_font = load_font(["freesansbold", "arialblack", "impact"], 50, bold=True)
 
+# ----------------------------------------------------------
+# HUD FRAME LOADER  <-- INSERTED HERE
+# ----------------------------------------------------------
+def load_hud_frames(folder, size):
+    frames = []
+    base = os.path.join(assets_dir, "hud", folder)
+
+    if not os.path.isdir(base):
+        return frames
+
+    for fname in sorted(os.listdir(base)):
+        if fname.lower().endswith((".png", ".webp")):
+            img = pygame.image.load(os.path.join(base, fname)).convert_alpha()
+            img = pygame.transform.scale(img, size)
+            frames.append(img)
+
+    return frames
+
 # HUD art loaded from sprite folders so the visuals can be authored externally.
 # Expected layout:
 # assets/
@@ -717,7 +745,6 @@ button_font = load_font(["freesansbold", "arialblack", "impact"], 50, bold=True)
 #       ...
 HUD_FRAMES_P1 = load_hud_frames("player1", HUD_FRAME_SIZE)
 HUD_FRAMES_P2 = load_hud_frames("player2", HUD_FRAME_SIZE)
-
 
 def upscale_frame(frame, scale):
     """Blow up a HUD frame while keeping the canvas size consistent."""
@@ -1236,6 +1263,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
