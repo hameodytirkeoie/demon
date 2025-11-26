@@ -938,13 +938,12 @@ if CORNER_TRAP:
     if fighter.attack_cool == 0 and random.random() < 0.60:
         pressed.add(fighter.melee_key)
 
-    # throw bottles from distance
-    if distance > 150 and fighter.proj_cool == 0:
-        if random.random() < THROW_CHANCE:
-            pressed.add(fighter.proj_key)
+# throw bottles from distance
+if distance > 150 and fighter.proj_cool == 0:
+    if random.random() < THROW_CHANCE:
+        pressed.add(fighter.proj_key)
 
-
-# 💀 RETURN GOES *AFTER* ALL LOGIC — NOT inside CORNER_TRAP 
+# RETURN MUST BE OUTSIDE ALL IF BLOCKS
 return InputState(pressed)
 
 
@@ -1686,6 +1685,7 @@ if __name__ == "__main__":
     game_loop()
     pygame.quit()
     sys.exit()
+
 
 
 
