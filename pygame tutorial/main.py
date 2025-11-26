@@ -1,6 +1,10 @@
 import pygame
 import sys
 import os
+import random
+
+global_projectiles = []
+
 
 pygame.init()
 # --- Screen ---
@@ -24,10 +28,18 @@ AI_COMFORT_DISTANCE = 140  # pixels of spacing the bot tries to maintain
 
 class GameSettings:
     def __init__(self):
-        self.rounds_to_win = 2
-        self.round_time = 60
-        self.overtime_time = 15
-        self.ai_aggression = 1.0  # 1.0 = default bot behavior, lower/raise to soften/harden the AI
+        # How many rounds to win a match
+        self.rounds_to_win = 3
+
+        # AI tuning (your old system)
+        self.ai_aggression = 1.0
+
+        # NEW: Difficulty system ("normal", "hard", "sweaty")
+        self.ai_difficulty = "normal"
+
+        # REQUIRED BY play_round()
+        self.round_time = 60          # Normal round length
+        self.overtime_time = 20       # Overtime length
 
 
 SETTINGS = GameSettings()
@@ -233,6 +245,7 @@ class Pencil:
     def __init__(self, x, y, direction):
         self.rect = pygame.Rect(x, y, 20, 4)
         self.speed = 12 * direction
+        self.direction = direction    # <--- REQUIRED FOR AI DODGE
         self.active = True
 
     def update(self):
@@ -245,28 +258,33 @@ class Pencil:
         tip = pygame.Rect(self.rect.right - 3, self.rect.y, 3, 4)
         pygame.draw.rect(surf, (120, 80, 20), tip)
 
-
 class Bottle:
     def __init__(self, x, y, direction, power=1.0):
+
         self.x = x
         self.y = y
-        speed_scale = power
+        
+        self.direction = direction
 
+        speed_scale = power
         self.vx = 8 * speed_scale * direction
         self.vy = -8 - 4 * speed_scale
         self.gravity = 0.5
 
+        # Sprites
         img = pygame.image.load(os.path.join(BASE_P1, "p1_bottle1.png")).convert_alpha()
         self.img = pygame.transform.scale(img, (25, 40))
+        self.width, self.height = self.img.get_size()
 
         broken = pygame.image.load(os.path.join(BASE_P1, "p1_bottle_broken.png")).convert_alpha()
         self.broken = pygame.transform.scale(broken, (30, 30))
-
-        self.width, self.height = self.img.get_size()
         self.broken_width, self.broken_height = self.broken.get_size()
-        self.dead = False
+
+        # State flags
         self.hit = False
         self.shatter_timer = 0
+        self.dead = False
+        self.active = True
 
     @property
     def rect(self):
@@ -274,42 +292,45 @@ class Bottle:
 
     def update(self):
         if not self.hit:
+            # Movement
             self.x += self.vx
             self.vy += self.gravity
             self.y += self.vy
-            if self.y + self.height >= GROUND_Y:
+
+            # Hit ground → shatter
+            if self.y >= GROUND_Y - self.height:
                 self.hit = True
                 self.shatter_timer = 15
-                # Pin the bottle to the ground on impact so it doesn't sink
-                # below the floor while the shatter animation plays.
+
+                # Snap to ground
                 self.y = GROUND_Y - self.broken_height
-                self.vx = 0
-                self.vy = 0
-                # Update the collision box to match the shattered sprite so the
-                # rect aligns with the art during the lingering animation.
                 self.width = self.broken_width
                 self.height = self.broken_height
-                 
+
+                # Stop movement
+                self.vx = 0
+                self.vy = 0
+
         elif self.shatter_timer > 0:
+            # Shatter animation
             self.shatter_timer -= 1
+
         else:
+            # Bottle destroyed
             self.dead = True
+
+        if self.dead:
+            self.active = False
+
+        # Remove off-screen
+        if self.x < -50 or self.x > WIDTH + 50:
+            self.active = False
 
     def draw(self, surf):
         if self.hit:
             surf.blit(self.broken, (self.x, self.y))
         else:
             surf.blit(self.img, (self.x, self.y))
-
-
-class InputState:
-    """Lightweight mapping so AI can drive fighters using key constants."""
-
-    def __init__(self, pressed=None):
-        self.pressed = set(pressed or [])
-
-    def __getitem__(self, key):
-        return key in self.pressed
 
 # ----------------------------------------------------------
 # FIGHTER CLASS
@@ -324,27 +345,34 @@ class Fighter:
 
         self.health = 100
         self.velocity = 5
+
+        # Track movement
         self.vel_x = 0
+        self.vel_y = 0
+        self.gravity = 1.0
+        self.on_ground = True
 
+        # AI fields
+        self.combo_step = 0
+        self.last_hit_timer = 0
 
-        # Track desired facing, but keep both orientations available so fighters
-        # always turn toward their opponent instead of staring off-screen.
+        # Facing direction
         self.facing_left = flip
         self.folder = folder
 
+        # Load all frames
         def load_frames(names):
             base_frames = [load_sprite(folder, f, False) for f in names]
             flipped_frames = [pygame.transform.flip(img, True, False) for img in base_frames]
             return base_frames, flipped_frames
 
-        self.idle_frames, self.idle_frames_flipped       = load_frames(idle)
-        self.walk_frames, self.walk_frames_flipped       = load_frames(walk)
-        self.attack_frames, self.attack_frames_flipped   = load_frames(attack)
-        self.hit_frames, self.hit_frames_flipped         = load_frames(hit)
-        self.win_frames, self.win_frames_flipped         = load_frames(win)
+        self.idle_frames, self.idle_frames_flipped = load_frames(idle)
+        self.walk_frames, self.walk_frames_flipped = load_frames(walk)
+        self.attack_frames, self.attack_frames_flipped = load_frames(attack)
+        self.hit_frames, self.hit_frames_flipped = load_frames(hit)
+        self.win_frames, self.win_frames_flipped = load_frames(win)
 
         # Animation state
-
         self.state = "idle"
         self.frame = 0
         self.counter = 0
@@ -353,11 +381,7 @@ class Fighter:
         self.rect = self.idle_frames[0].get_rect()
         self.rect.midbottom = (x, GROUND_Y)
 
-        self.vel_y = 0
-        self.vel_x = 0
-        self.gravity = 1.0
-        self.on_ground = True
-
+        # Cooldowns / combat
         self.attack_cool = 0
         self.proj_cool = 0
         self.just_shot = False
@@ -365,21 +389,20 @@ class Fighter:
         self.proj_charging = False
         self.proj_charge = 0
         self.max_proj_charge = 45
-
         self.hit_timer = 0
         self.win_timer = 0
         self.ai_charge_frames = 0
 
-        self.combo_step = 0
-        self.last_hit_timer = 0
+        # Initial displayed image
+        self.image = (
+            self.idle_frames_flipped[0]
+            if self.facing_left
+            else self.idle_frames[0]
+        )
 
-
-                     
-        # Seed the initial sprite with the correct facing so countdown screens
-        # render the fighter looking toward their opponent instead of turning
-        # around on the first animation update.
-        self.image = self.idle_frames_flipped[0] if self.facing_left else self.idle_frames[0]
-
+    # ----------------------------------------------------------
+    # HIT & WIN STATES
+    # ----------------------------------------------------------
     def set_hit(self):
         self.state = "hit"
         self.frame = 0
@@ -390,16 +413,21 @@ class Fighter:
         self.frame = 0
         self.win_timer = 999
 
+    # ----------------------------------------------------------
+    # UPDATE (MOVEMENT, JUMP, ATTACK, ANIMATION)
+    # ----------------------------------------------------------
     def update(self, keys, left, right, jump, opponent):
-        # Keep facing synced to the opponent even while stunned or celebrating
-        # so the fighter never drifts into the wrong orientation mid-fight.
+
+        # Always face opponent
         if opponent:
             self.facing_left = opponent.rect.centerx < self.rect.centerx
 
+        # Win animation
         if self.win_timer > 0:
             self.animate(self.win_frames, self.win_frames_flipped, 12)
             return
 
+        # Hit animation
         if self.hit_timer > 0:
             self.hit_timer -= 1
             self.animate(self.hit_frames, self.hit_frames_flipped, 6)
@@ -408,9 +436,10 @@ class Fighter:
         self.just_shot = False
         moving = False
 
-        # movement
-        # movement
-        self.vel_x = 0  # reset horizontal velocity each frame
+        # ------------------------------------------
+        # MOVEMENT (updated with vel_x tracking)
+        # ------------------------------------------
+        self.vel_x = 0
 
         if keys[left]:
             self.rect.x -= self.velocity
@@ -422,10 +451,12 @@ class Fighter:
             self.vel_x = self.velocity
             moving = True
 
-        # keep fighters on screen
+        # Keep fighter on screen
         self.rect.x = max(0, min(self.rect.x, WIDTH - self.rect.width))
 
-        # jump
+        # ------------------------------------------
+        # JUMPING
+        # ------------------------------------------
         if keys[jump] and self.on_ground:
             self.vel_y = -12
             self.on_ground = False
@@ -438,16 +469,15 @@ class Fighter:
             self.vel_y = 0
             self.on_ground = True
 
-        # Turn to face the opponent so sprites never look away from the action.
-        if opponent:
-            self.facing_left = opponent.rect.centerx < self.rect.centerx
-
-        # attacks
+        # ------------------------------------------
+        # ATTACKING
+        # ------------------------------------------
         if self.attack_cool > 0:
-            self.attack_cool = max(0, self.attack_cool - 1)
+            self.attack_cool -= 1
         if self.proj_cool > 0:
-            self.proj_cool = max(0, self.proj_cool - 1)
+            self.proj_cool -= 1
 
+        # MELEE
         if keys[self.melee_key] and self.attack_cool == 0:
             self.attack_cool = 18
             self.state = "attack"
@@ -455,6 +485,7 @@ class Fighter:
                 opponent.health -= 10
                 opponent.set_hit()
 
+        # PROJECTILE
         elif self.proj_key and self.attack_cool == 0 and self.proj_cool == 0:
             if keys[self.proj_key]:
                 if not self.proj_charging:
@@ -462,23 +493,26 @@ class Fighter:
                     self.proj_charge = 0
                 self.proj_charge = min(self.proj_charge + 1, self.max_proj_charge)
                 self.state = "attack"
+
             elif self.proj_charging:
                 charge_ratio = self.proj_charge / self.max_proj_charge
-                self.just_shot_power = 0.5 + charge_ratio  # 0.5x on tap, up to 1.5x on full charge
+                self.just_shot_power = 0.5 + charge_ratio
                 self.attack_cool = 20
-                self.proj_cool = 60  # ~1 second cooldown at 60 FPS
+                self.proj_cool = 60
                 self.state = "attack"
                 self.just_shot = True
                 self.proj_charging = False
                 self.proj_charge = 0
+
             else:
                 self.state = "walk" if moving else "idle"
+
         else:
-            if moving:
-                self.state = "walk"
-            else:
-                self.state = "idle"
-        # animations
+            self.state = "walk" if moving else "idle"
+
+        # ------------------------------------------
+        # ANIMATION
+        # ------------------------------------------
         if self.state == "idle":
             self.animate(self.idle_frames, self.idle_frames_flipped, self.idle_speed)
         elif self.state == "walk":
@@ -486,6 +520,9 @@ class Fighter:
         elif self.state == "attack":
             self.animate(self.attack_frames, self.attack_frames_flipped, 6)
 
+    # ----------------------------------------------------------
+    # ANIMATION HANDLER
+    # ----------------------------------------------------------
     def animate(self, base_frames, flipped_frames, speed):
         frames = flipped_frames if self.facing_left else base_frames
 
@@ -493,14 +530,17 @@ class Fighter:
         if self.counter >= speed:
             self.counter = 0
             self.frame += 1
+
         if self.frame >= len(frames):
             self.frame = 0
             if self.state == "attack":
                 self.state = "idle"
+
         self.image = frames[self.frame]
-        
+
     def draw(self, surf):
         surf.blit(self.image, self.rect.topleft)
+
 
 
 # ----------------------------------------------------------
@@ -537,126 +577,171 @@ def create_players():
 
     return p1, p2
 
-def build_ai_inputs(
-    fighter, opponent, left_key, right_key, jump_key, aggression=1.0
-):
+# ----------------------------------------------------------
+# INPUT STATE (REQUIRED FOR AI)
+# ----------------------------------------------------------
+class InputState:
+    """Lightweight key-state wrapper so AI can output key presses."""
+
+    def __init__(self, pressed=None):
+        self.pressed = set(pressed or [])
+
+    def __getitem__(self, key):
+        return key in self.pressed
+
+
+def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key, aggression=1.0):
     pressed = set()
     dx = opponent.rect.centerx - fighter.rect.centerx
     distance = abs(dx)
     move_right = dx > 0
 
-    # Always face opponent
     fighter.facing_left = opponent.rect.centerx < fighter.rect.centerx
 
-    # ---------------------------
-    # RANGE DEFINITIONS
-    # ---------------------------
-    CLOSE_RANGE = 85          # punch range
-    MID_RANGE = 230           # projectile poke range
-    FAR_RANGE = 350           # chase range
-    TOO_CLOSE = 55            # used for retreat logic
+    # -------------------------------------------------
+    # DIFFICULTY SETTINGS
+    # -------------------------------------------------
+    difficulty = SETTINGS.ai_difficulty  # normal, hard, sweaty
 
-    # ---------------------------
-    # RETREAT / AGGRESSION LOGIC
-    # ---------------------------
-    # If AI HP is very low → plays defensive
-    if fighter.health < 25 and distance < TOO_CLOSE:
-        # pull back
-        pressed.add(left_key if move_right else right_key)
+    if difficulty == "normal":
+        react = 15
+        proj_chance = 0.25
+        combo_chance = 0.20
+        dodge_chance = 0.20
+        spacing_lo, spacing_hi = 70, 140
 
-    # If enemy HP is low → play aggressive to secure kill
-    if opponent.health < 30 and distance < FAR_RANGE:
-        aggression = 1.4
+    elif difficulty == "hard":
+        react = 10
+        proj_chance = 0.45
+        combo_chance = 0.55
+        dodge_chance = 0.55
+        spacing_lo, spacing_hi = 90, 170
 
-    # ---------------------------
-    # PREDICTIVE MOVEMENT ("Smart chase")
-    # ---------------------------
-    if distance > MID_RANGE:
-        # Predict where enemy will be in 10 frames
-        predicted_dx = dx + (opponent.vel_x * 10)
+    else:  # SWEATY
+        react = 4
+        proj_chance = 0.80
+        combo_chance = 0.90
+        dodge_chance = 0.85
+        spacing_lo, spacing_hi = 110, 210
 
-        if predicted_dx > 0:
-            pressed.add(right_key)
-        else:
-            pressed.add(left_key)
+    # -------------------------------------------------
+    # READ PROJECTILES IN WORLD (NEW!!!)
+    # -------------------------------------------------
+    incoming = []
+    try:
+        for proj in global_projectiles:  # You MUST create this list before updating projectiles
+            incoming.append(proj)
+    except:
+        incoming = []
 
-    # Maintain pressure at close range
-    elif CLOSE_RANGE < distance < MID_RANGE:
-        if distance > (CLOSE_RANGE + 10):
-            pressed.add(right_key if move_right else left_key)
+    # -------------------------------------------------
+    # DODGE PROJECTILES — ALL DIFFICULTIES
+    # -------------------------------------------------
+    danger_left = False
+    danger_right = False
+    danger_jump = False
 
-    # ---------------------------
-    # WALL SAFETY
-    # ---------------------------
-    if fighter.rect.left <= 0 and left_key in pressed:
-        pressed.remove(left_key)
-    if fighter.rect.right >= WIDTH and right_key in pressed:
-        pressed.remove(right_key)
+    for proj in incoming:
+        if not proj.active:
+            continue
 
-    # ---------------------------
-    # DODGE PROJECTILES / JUMP LOGIC
-    # ---------------------------
-    # SIMPLE DODGE:
-    if hasattr(opponent, "projectiles"):
-        for proj in opponent.projectiles:
-            # Projectile approaching fighter horizontally
-            if abs(proj.rect.centery - fighter.rect.centery) < 60:
-                if proj.rect.centerx < fighter.rect.centerx:
-                    # bullet coming from left
-                    pressed.add(right_key)
+        # Horizontal distance
+        pdx = proj.rect.centerx - fighter.rect.centerx
+        pdy = proj.rect.centery - fighter.rect.centery
+
+        close_x = abs(pdx) < 160
+        close_y = abs(pdy) < 70
+
+        # If projectile is REALLY close → dodge instantly
+        if close_x and close_y:
+            if proj.direction > 0:  # coming from left
+                danger_right = True
+            else:                   # coming from right
+                danger_left = True
+
+            # Jump dodge chance
+            if random.random() < dodge_chance:
+                danger_jump = True
+
+        # Sweaty AI: Predict projectile 10 frames ahead
+        if difficulty == "sweaty":
+            predicted_x = proj.rect.centerx + proj.speed * 10
+            predicted_dx = predicted_x - fighter.rect.centerx
+            if abs(predicted_dx) < 180:
+                if random.random() < 0.70:
+                    danger_jump = True
+                if predicted_dx > 0:
+                    danger_right = True
                 else:
-                    pressed.add(left_key)
+                    danger_left = True
 
-            # Jump over ground-level projectile
-            if proj.rect.centery > fighter.rect.centery + 10 and distance < MID_RANGE:
-                if fighter.on_ground:
-                    pressed.add(jump_key)
-
-    # Jump if opponent is above
-    if fighter.on_ground and opponent.rect.bottom < fighter.rect.bottom - 40:
+    # EXECUTE DODGE
+    if danger_jump and fighter.on_ground:
         pressed.add(jump_key)
 
-    # ---------------------------
-    # COMBAT LOGIC (smart attacks)
-    # ---------------------------
+    if danger_left:
+        pressed.add(right_key)
 
-    # CLOSE RANGE → COMBO PUNCH SYSTEM
-    if distance < CLOSE_RANGE and fighter.attack_cool == 0:
-        # 3-stage combo decision
-        if fighter.combo_step == 0:
+    if danger_right:
+        pressed.add(left_key)
+
+    # -------------------------------------------------
+    # MOVEMENT — Only if not dodging
+    # -------------------------------------------------
+    if not (danger_left or danger_right):
+
+        if distance > spacing_hi:
+            pressed.add(right_key if move_right else left_key)
+
+        elif distance < spacing_lo:
+            backstep_chance = 0.15 if difficulty == "normal" else 0.35
+            if random.random() < backstep_chance:
+                pressed.add(left_key if move_right else right_key)
+
+        # Don’t allow walking into walls
+        if fighter.rect.left <= 0 and left_key in pressed:
+            pressed.remove(left_key)
+        if fighter.rect.right >= WIDTH and right_key in pressed:
+            pressed.remove(right_key)
+
+    # -------------------------------------------------
+    # JUMP OVER OPPONENT (Anti-corner)
+    # -------------------------------------------------
+    if fighter.rect.left < 40 and move_right:  # Left wall
+        if fighter.on_ground:
+            pressed.add(jump_key)
+
+    if fighter.rect.right > WIDTH - 40 and not move_right:  # Right wall
+        if fighter.on_ground:
+            pressed.add(jump_key)
+
+    # -------------------------------------------------
+    # MELEE COMBO LOGIC
+    # -------------------------------------------------
+    if distance < 80 and fighter.attack_cool == 0:
+        if random.random() < combo_chance:
             pressed.add(fighter.melee_key)
-            fighter.combo_step = 1
-        elif fighter.combo_step == 1 and fighter.last_hit_timer < 20:
-            pressed.add(fighter.melee_key)
-            fighter.combo_step = 2
-        elif fighter.combo_step == 2 and fighter.last_hit_timer < 28:
-            pressed.add(fighter.melee_key)
-            fighter.combo_step = 0
+            fighter.combo_step = (fighter.combo_step + 1) % 3
         else:
-            # reset combo if failed
-            fighter.combo_step = 0
+            pressed.add(fighter.melee_key)
 
-    # MID RANGE → PROJECTILE POKES
-    elif CLOSE_RANGE < distance < MID_RANGE:
-        if fighter.proj_cool == 0:
-            pressed.add(fighter.proj_key)
-
-    # FAR RANGE → CHARGED PROJECTILES
-    elif distance >= MID_RANGE:
-        if fighter.proj_key:
-            if not fighter.proj_charging:
+    # -------------------------------------------------
+    # PROJECTILE LOGIC (Smarter)
+    # -------------------------------------------------
+    elif distance > 170 and fighter.proj_cool == 0:
+        # Don’t throw if a projectile is already incoming
+        if not (danger_left or danger_right):
+            if random.random() < proj_chance:
                 pressed.add(fighter.proj_key)
-                fighter.ai_charge_frames = 0
-            else:
-                fighter.ai_charge_frames += 1
-                # Charge longer if enemy HP is high
-                hold = 18 if opponent.health < 50 else 34
-                if fighter.ai_charge_frames < hold:
-                    pressed.add(fighter.proj_key)
 
-    # ---------------------------
-    # RETURN FINAL INPUTS
-    # ---------------------------
+        # Sweaty prediction shot
+        if difficulty == "sweaty":
+            predicted_pos = opponent.rect.centerx + opponent.vel_x * 8
+            predicted_dx = predicted_pos - fighter.rect.centerx
+
+            if abs(predicted_dx) < 220 and random.random() < 0.75:
+                pressed.add(fighter.proj_key)
+
     return InputState(pressed)
 
 # ----------------------------------------------------------
@@ -1208,7 +1293,7 @@ def play_round(p1, p2, p1_ai=False, p2_ai=False, round_score=None, target_wins=N
             start_x = p2.rect.left if direction == -1 else p2.rect.right - 20
             projectiles.append(Pencil(start_x, p2.rect.centery, direction))
 
-        # update projectiles
+        # ---- UPDATE PROJECTILES ----
         for p in projectiles[:]:
             p.update()
             if p.rect.colliderect(p1.rect):
@@ -1218,20 +1303,27 @@ def play_round(p1, p2, p1_ai=False, p2_ai=False, round_score=None, target_wins=N
             elif not p.active:
                 projectiles.remove(p)
 
+        # ---- UPDATE BOTTLES ----
         for b in bottles[:]:
             prev_hit = b.hit
             b.update()
+
+            # bottle shatter hit detection
             if not prev_hit and b.hit:
-                # bottle shatter hitbox
                 hitbox = pygame.Rect(b.x, b.y, 40, 40)
                 if hitbox.colliderect(p2.rect):
                     p2.health -= 15
                     p2.set_hit()
+
+            # remove bottle
             if b.dead:
                 bottles.remove(b)
             elif b.x > WIDTH + 40 or b.x < -40:
                 bottles.remove(b)
 
+        # ---- GLOBAL PROJECTILE LIST (for AI dodge) ----
+        global global_projectiles
+        global_projectiles = projectiles + bottles
         # draw
         for p in projectiles: p.draw(screen)
         for b in bottles:    b.draw(screen)
