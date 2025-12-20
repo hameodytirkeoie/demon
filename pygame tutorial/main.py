@@ -62,8 +62,13 @@ CHARACTER_ROSTER = {
         "prefix": "p2",
         "card_color": (255, 140, 180),
     },
+    "player3": {
+        "label": "Player Three",
+        "folder": BASE_P3,
+        "prefix": "p3",
+        "card_color": (140, 220, 160),
+    },
 }
-
 
 def filter_character_roster(roster):
     """Drop characters whose asset folders or idle sprites are missing.
@@ -252,6 +257,45 @@ def load_hud_frames(subfolder, scale_to=None, mirror=False):
 
     return frames
 
+def upscale_frame(frame, scale):
+    """Blow up a HUD frame while keeping the canvas size consistent."""
+
+    src_w, src_h = frame.get_size()
+    target_w = max(1, int(round(src_w * scale)))
+    target_h = max(1, int(round(src_h * scale)))
+
+    enlarged = pygame.transform.smoothscale(frame, (target_w, target_h))
+    canvas = pygame.Surface((src_w, src_h), pygame.SRCALPHA)
+
+    offset_x = (src_w - target_w) // 2
+    offset_y = (src_h - target_h) // 2
+    canvas.blit(enlarged, (offset_x, offset_y))
+    return canvas
+
+
+def build_character_hud_frames(character_key, mirror=False):
+    data = CHARACTER_ROSTER.get(character_key)
+    if not data:
+        return []
+
+    frames = load_hud_frames(character_key, HUD_FRAME_SIZE, mirror=mirror)
+
+    if not frames:
+        idle_path = os.path.join(data["folder"], f"{data['prefix']}_idle1.png")
+        if os.path.exists(idle_path):
+            frame = pygame.image.load(idle_path).convert_alpha()
+            frame = normalize_hud_frame(frame, HUD_FRAME_SIZE, mirror=mirror)
+            frames = [clean_hud_frame(frame)]
+
+    if character_key == "player2" and len(frames) >= 2:
+        frames[1] = upscale_frame(frames[1], 1.12)
+
+    return frames
+
+
+HUD_FRAMES_P1 = []
+HUD_FRAMES_P2 = []
+
 def load_font(font_names, size, bold=False, italic=False):
     """Attempt to load one of the preferred fonts, falling back gracefully."""
 
@@ -381,19 +425,92 @@ class Bottle:
         else:
             surf.blit(self.img, (self.x, self.y))
 
+
+class KickWave:
+    def __init__(self, x, y, direction, power=1.0):
+
+        base_speed = 9 + int(3 * power)
+        self.speed = base_speed * direction
+        self.direction = direction
+        self.damage = 8 + int(4 * power)
+        self.active = True
+
+        self.rect = pygame.Rect(x, y, 36, 22)
+        self.trail = []
+
+    def update(self):
+        self.rect.x += self.speed
+        self.trail.append(self.rect.copy())
+        self.trail = self.trail[-6:]
+
+        if self.rect.right < -20 or self.rect.left > WIDTH + 20:
+            self.active = False
+
+    def draw(self, surf):
+        # Draw a faint trail so the kickwave feels energetic
+        alpha_steps = [140, 110, 80, 60, 40, 30]
+        for rect, alpha in zip(reversed(self.trail), alpha_steps):
+            ghost = pygame.Surface(rect.size, pygame.SRCALPHA)
+            pygame.draw.rect(ghost, (120, 220, 160, alpha), ghost.get_rect(), border_radius=6)
+            surf.blit(ghost, rect.topleft)
+
+        pygame.draw.rect(surf, (80, 240, 160), self.rect, border_radius=8)
+
+
+def build_bottle_throw(fighter, direction, power):
+    return Bottle(fighter.rect.centerx, fighter.rect.y, direction, power=power)
+
+
+def build_pencil_throw(fighter, direction, power):
+    start_x = fighter.rect.left if direction == -1 else fighter.rect.right - 20
+    return Pencil(start_x, fighter.rect.centery, direction)
+
+
+def build_kickwave(fighter, direction, power):
+    start_x = fighter.rect.centerx + direction * 18
+    start_y = fighter.rect.centery - 8
+    return KickWave(start_x, start_y, direction, power=power)
+
 # ----------------------------------------------------------
 # FIGHTER CLASS (FINAL, CLEAN, WORKING)
 # ----------------------------------------------------------
 class Fighter:
-    def __init__(self, x, folder, idle, walk, attack, hit, win, flip=False,
-                 melee_key=None, proj_key=None, crouch_key=None, block_key=None):
+    def __init__(
+        self,
+        x,
+        folder,
+        idle,
+        walk,
+        attack,
+        hit,
+        win,
+        flip=False,
+        melee_key=None,
+        proj_key=None,
+        crouch_key=None,
+        block_key=None,
+        move_config=None,
+        character_key=None,
+    ):
+
 
         self.x = x
         self.melee_key = melee_key
         self.proj_key = proj_key
 
+        move_config = move_config or {}
+
+        self.character_key = character_key or "player1"
         self.health = 100
-        self.velocity = 5
+        self.velocity = move_config.get("speed", 5)
+
+        self.melee_damage = move_config.get("melee_damage", 10)
+        self.melee_cooldown = move_config.get("melee_cooldown", 18)
+        self.projectile_cooldown = move_config.get("projectile_cooldown", 60)
+        self.projectile_attack_cooldown = move_config.get("projectile_attack_cooldown", 20)
+        self.max_proj_charge = move_config.get("max_proj_charge", 45)
+
+        self.projectile_factory = move_config.get("projectile_factory")
 
         # Movement
         self.vel_x = 0
@@ -458,7 +575,6 @@ class Fighter:
         self.just_shot_power = 1.0
         self.proj_charging = False
         self.proj_charge = 0
-        self.max_proj_charge = 45
 
         self.hit_timer = 0
         self.win_timer = 0
@@ -587,12 +703,12 @@ class Fighter:
 
         # MELEE
         if keys[self.melee_key] and self.attack_cool == 0 and not self.blocking:
-            self.attack_cool = 18
+            self.attack_cool = self.melee_cooldown
             self.state = "attack"
 
             if self.rect.colliderect(opponent.rect):
                 attack_dir = -1 if self.facing_left else 1
-                opponent.take_hit(10, attack_dir)
+                opponent.take_hit(self.melee_damage, attack_dir)
 
         # PROJECTILE
         elif keys[self.proj_key] and self.attack_cool == 0 and self.proj_cool == 0 and not self.blocking:
@@ -606,8 +722,8 @@ class Fighter:
         elif self.proj_charging:
             ratio = self.proj_charge / self.max_proj_charge
             self.just_shot_power = 0.5 + ratio
-            self.attack_cool = 20
-            self.proj_cool = 60
+            self.attack_cool = self.projectile_attack_cooldown
+            self.proj_cool = self.projectile_cooldown
             self.just_shot = True
             self.proj_charging = False
             self.proj_charge = 0
@@ -615,6 +731,13 @@ class Fighter:
 
         else:
             self.state = "walk" if moving else "idle"
+
+    def spawn_projectile(self):
+        if not self.just_shot or not self.projectile_factory:
+            return None
+
+        direction = -1 if self.facing_left else 1
+        return self.projectile_factory(self, direction, self.just_shot_power)
 
         # ANIMATION
         if self.state == "idle":
@@ -670,6 +793,40 @@ class Fighter:
 # CREATE PLAYERS
 # ----------------------------------------------------------
 def create_players(p1_choice="player1", p2_choice="player2"):
+    def build_move_config(character_key):
+        if character_key == "player1":
+            return {
+                "melee_damage": 10,
+                "melee_cooldown": 18,
+                "projectile_cooldown": 60,
+                "projectile_attack_cooldown": 22,
+                "projectile_factory": build_bottle_throw,
+                "max_proj_charge": 45,
+                "speed": 5,
+            }
+
+        if character_key == "player2":
+            return {
+                "melee_damage": 9,
+                "melee_cooldown": 16,
+                "projectile_cooldown": 45,
+                "projectile_attack_cooldown": 18,
+                "projectile_factory": build_pencil_throw,
+                "max_proj_charge": 38,
+                "speed": 5,
+            }
+
+        # Player 3 specializes in aggressive kicks and a custom kickwave projectile.
+        return {
+            "melee_damage": 12,
+            "melee_cooldown": 15,
+            "projectile_cooldown": 52,
+            "projectile_attack_cooldown": 18,
+            "projectile_factory": build_kickwave,
+            "max_proj_charge": 32,
+            "speed": 6,
+        }
+
     def build_sprite_sets(prefix):
         idle = [f"{prefix}_idle1.png", f"{prefix}_idle2.png"]
         walk = [f"{prefix}_walk1.png"]
@@ -681,6 +838,7 @@ def create_players(p1_choice="player1", p2_choice="player2"):
     def build_fighter(character_key, x, flip, melee_key, proj_key, crouch_key, block_key):
         data = CHARACTER_ROSTER.get(character_key, CHARACTER_ROSTER["player1"])
         idle, walk, attack, hit, win = build_sprite_sets(data["prefix"])
+        move_config = build_move_config(character_key)
 
         return Fighter(
             x,
@@ -695,8 +853,9 @@ def create_players(p1_choice="player1", p2_choice="player2"):
             proj_key=proj_key,
             crouch_key=crouch_key,
             block_key=block_key,
+            move_config=move_config,
+            character_key=character_key,
         )
-
     p1 = build_fighter(
         p1_choice,
         150,
@@ -1327,59 +1486,6 @@ def character_select():
         pygame.display.flip()
         clock.tick(60)
 
-# ----------------------------------------------------------
-# HUD FRAME LOADER  <-- INSERTED HERE
-# ----------------------------------------------------------
-def load_hud_frames(folder, size):
-    frames = []
-    base = os.path.join(assets_dir, "hud", folder)
-
-    if not os.path.isdir(base):
-        return frames
-
-    for fname in sorted(os.listdir(base)):
-        if fname.lower().endswith((".png", ".webp")):
-            img = pygame.image.load(os.path.join(base, fname)).convert_alpha()
-            img = pygame.transform.scale(img, size)
-            frames.append(img)
-
-    return frames
-
-# HUD art loaded from sprite folders so the visuals can be authored externally.
-# Expected layout:
-# assets/
-#   hud/
-#     player1/
-#       frame1.png
-#       frame2.png
-#     player2/
-#       frame1.png
-#       ...
-HUD_FRAMES_P1 = load_hud_frames("player1", HUD_FRAME_SIZE)
-HUD_FRAMES_P2 = load_hud_frames("player2", HUD_FRAME_SIZE)
-
-def upscale_frame(frame, scale):
-    """Blow up a HUD frame while keeping the canvas size consistent."""
-
-    src_w, src_h = frame.get_size()
-    target_w = max(1, int(round(src_w * scale)))
-    target_h = max(1, int(round(src_h * scale)))
-
-    enlarged = pygame.transform.smoothscale(frame, (target_w, target_h))
-    canvas = pygame.Surface((src_w, src_h), pygame.SRCALPHA)
-
-    # Center the enlarged art; if it overflows, blitting will crop the edges so
-    # the outer dimensions stay the same and the HUD anchors remain stable.
-    offset_x = (src_w - target_w) // 2
-    offset_y = (src_h - target_h) // 2
-    canvas.blit(enlarged, (offset_x, offset_y))
-    return canvas
-
-
-if len(HUD_FRAMES_P2) >= 2:
-    HUD_FRAMES_P2[1] = upscale_frame(HUD_FRAMES_P2[1], 1.12)
-
-
 menu_title = menu_font.render("Big Boy Simulator", True, WHITE)
 start_prompt = timer_font.render(
     "Press ENTER or NUMPAD ENTER for two players", True, WHITE
@@ -1712,24 +1818,41 @@ def play_round(p1, p2, p1_ai=False, p2_ai=False, round_score=None, target_wins=N
         # update
         p1.update(p1_inputs, pygame.K_a, pygame.K_d, pygame.K_w, pygame.K_s, pygame.K_LSHIFT, p2)
         p2.update(p2_inputs, pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, pygame.K_DOWN, pygame.K_RSHIFT, p1)
-        if p1.just_shot:
-            direction = -1 if p1.facing_left else 1
-            bottles.append(Bottle(p1.rect.centerx, p1.rect.y, direction, power=p1.just_shot_power))
+        for fighter in (p1, p2):
+            proj = fighter.spawn_projectile()
+            if not proj:
+                continue
 
-        if p2.just_shot:
-            direction = -1 if p2.facing_left else 1
-            start_x = p2.rect.left if direction == -1 else p2.rect.right - 20
-            projectiles.append(Pencil(start_x, p2.rect.centery, direction))
+            if isinstance(proj, Bottle):
+                bottles.append(proj)
+            else:
+                projectiles.append(proj)
 
         # ---- UPDATE PROJECTILES ----
+        def apply_projectile_damage(target, proj):
+            damage = getattr(proj, "damage", 5)
+            knock_dir = -1 if getattr(proj, "direction", 1) > 0 else 1
+            target.take_hit(damage, knock_dir)
+
         for p in projectiles[:]:
             p.update()
-            if p.rect.colliderect(p1.rect):
-                p1.take_hit(5, -1 if p.speed > 0 else 1)
-                projectiles.remove(p)
-            elif not p.active:
-                projectiles.remove(p)
 
+            hit_target = None
+            if p.rect.colliderect(p1.rect):
+                hit_target = p1
+            elif p.rect.colliderect(p2.rect):
+                hit_target = p2
+
+            if hit_target:
+                apply_projectile_damage(hit_target, p)
+                if hasattr(p, "on_hit"):
+                    p.on_hit()
+                if not getattr(p, "persist_on_hit", False):
+                    projectiles.remove(p)
+                continue
+
+            if not getattr(p, "active", True):
+                projectiles.remove(p)
         # ---- UPDATE BOTTLES ----
         for b in bottles[:]:
             prev_hit = b.hit
@@ -1814,6 +1937,10 @@ def game_loop():
 
         p1_choice, p2_choice = choices
 
+        global HUD_FRAMES_P1, HUD_FRAMES_P2
+        HUD_FRAMES_P1 = build_character_hud_frames(p1_choice, mirror=False)
+        HUD_FRAMES_P2 = build_character_hud_frames(p2_choice, mirror=True)
+
         p1_ai = selection == "p2"
         p2_ai = selection == "p1"
 
@@ -1841,7 +1968,12 @@ def game_loop():
                 match_aborted = True
                 break
 
-            round_winner_text = "PLAYER 1 WINS!" if winner == 1 else "PLAYER 2 WINS!"
+            p1_label = CHARACTER_ROSTER.get(p1_choice, {}).get("label", "Player 1")
+            p2_label = CHARACTER_ROSTER.get(p2_choice, {}).get("label", "Player 2")
+
+            round_winner_text = (
+                f"{p1_label.upper()} WINS!" if winner == 1 else f"{p2_label.upper()} WINS!"
+            )
             if winner == 1:
                 p1_score += 1
                 p1.set_win()
@@ -1854,7 +1986,8 @@ def game_loop():
         if match_aborted:
             continue
 
-        champion_label = "PLAYER 1 WINS!" if p1_score > p2_score else "PLAYER 2 WINS!"
+        champion_label = p1_label if p1_score > p2_score else p2_label
+        champion_label = f"{champion_label.upper()} WINS!"
 
         choice = post_game_menu(champion_label)
         if choice == "exit":
