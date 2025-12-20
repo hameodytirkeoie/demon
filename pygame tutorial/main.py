@@ -47,6 +47,28 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 assets_dir = os.path.join(BASE_DIR, "assets")
 BASE_P1 = os.path.join(assets_dir, "player1")
 BASE_P2 = os.path.join(assets_dir, "player2")
+BASE_P3 = os.path.join(assets_dir, "player3")
+
+CHARACTER_ROSTER = {
+    "player1": {
+        "label": "Player One",
+        "folder": BASE_P1,
+        "prefix": "p1",
+        "card_color": (80, 180, 255),
+    },
+    "player2": {
+        "label": "Player Two",
+        "folder": BASE_P2,
+        "prefix": "p2",
+        "card_color": (255, 140, 180),
+    },
+    "player3": {
+        "label": "player Three",
+        "folder": BASE_P3,
+        "prefix": "p2",
+        "card_color": (140, 220, 140),
+    },
+}
 
 # ----------------------------------------------------------
 # BACKGROUNDS
@@ -569,7 +591,7 @@ class Fighter:
         if self.state == "idle":
             self.animate(self.idle_frames, self.idle_frames_flipped, self.idle_speed)
         elif self.state == "walk":
-            self.animate(self.walk_frames, self.walk_frames_flipped, 8)
+            self.animate(self.walk_frames, self.walk_frames_flipped, 11)
 
         elif self.blocking:
             self.state = "block"
@@ -615,41 +637,58 @@ class Fighter:
 # ----------------------------------------------------------
 # CREATE PLAYERS
 # ----------------------------------------------------------
-def create_players():
-    p1_idle   = ["p1_idle1.png", "p1_idle2.png"]
-    p1_walk   = ["p1_walk1.png"]
-    p1_attack = ["p1_attack1.png", "p1_attack2.png"]
-    p1_hit    = ["p1_hit1.png", "p1_hit2.png"]
-    p1_win    = ["p1_win1.png"]
+# ----------------------------------------------------------
+# CREATE PLAYERS
+# ----------------------------------------------------------
+def create_players(p1_choice="player1", p2_choice="player2"):
+    def build_sprite_sets(prefix):
+        idle = [f"{prefix}_idle1.png", f"{prefix}_idle2.png"]
+        walk = [f"{prefix}_walk1.png"]
+        attack = [f"{prefix}_attack1.png", f"{prefix}_attack2.png"]
+        hit = [f"{prefix}_hit1.png", f"{prefix}_hit2.png"]
+        win = [f"{prefix}_win1.png"]
+        return idle, walk, attack, hit, win
 
-    p2_idle   = ["p2_idle1.png", "p2_idle2.png"]
-    p2_walk   = ["p2_walk1.png"]
-    p2_attack = ["p2_attack1.png", "p2_attack2.png"]
-    p2_hit    = ["p2_hit1.png", "p2_hit2.png"]
-    p2_win    = ["p2_win1.png"]
+    def build_fighter(character_key, x, flip, melee_key, proj_key, crouch_key, block_key):
+        data = CHARACTER_ROSTER.get(character_key, CHARACTER_ROSTER["player1"])
+        idle, walk, attack, hit, win = build_sprite_sets(data["prefix"])
 
-    p1 = Fighter(
-        150, BASE_P1,
-        p1_idle, p1_walk, p1_attack, p1_hit, p1_win,
-        flip=False,
-        melee_key=pygame.K_SPACE,
-        proj_key=pygame.K_q,
-        crouch_key=pygame.K_s,
-        block_key=pygame.K_LSHIFT,
+        return Fighter(
+            x,
+            data["folder"],
+            idle,
+            walk,
+            attack,
+            hit,
+            win,
+            flip=flip,
+            melee_key=melee_key,
+            proj_key=proj_key,
+            crouch_key=crouch_key,
+            block_key=block_key,
+        )
+
+    p1 = build_fighter(
+        p1_choice,
+        150,
+        False,
+        pygame.K_SPACE,
+        pygame.K_q,
+        pygame.K_s,
+        pygame.K_LSHIFT,
     )
 
-    p2 = Fighter(
-        770, BASE_P2,
-        p2_idle, p2_walk, p2_attack, p2_hit, p2_win,
-        flip=True,
-        melee_key=pygame.K_RETURN,
-        proj_key=pygame.K_p,
-        crouch_key=pygame.K_DOWN,
-        block_key=pygame.K_RSHIFT,
+    p2 = build_fighter(
+        p2_choice,
+        770,
+        True,
+        pygame.K_RETURN,
+        pygame.K_p,
+        pygame.K_DOWN,
+        pygame.K_RSHIFT,
     )
 
     return p1, p2
-
 # ----------------------------------------------------------
 # INPUT STATE (REQUIRED FOR AI)
 # ----------------------------------------------------------
@@ -1126,6 +1165,138 @@ timer_font = load_font(["dejavusansmono", "consolas", "freesansbold"], 60)
 controls_font = load_font(["dejavusans", "arial", "freesansbold"], 32, bold=True)
 ui_font = load_font(["dejavusansmono", "consolas", "freesansbold"], 28)
 button_font = load_font(["freesansbold", "arialblack", "impact"], 50, bold=True)
+character_card_font = load_font(["freesansbold", "arial"], 34, bold=True)
+character_sub_font = load_font(["dejavusans", "arial"], 24)
+
+CHARACTER_KEYS = list(CHARACTER_ROSTER.keys())
+CARD_SIZE = (220, 260)
+CARD_GAP = 30
+
+
+def build_character_cards():
+    cards = {}
+    count = len(CHARACTER_KEYS)
+
+    total_width = count * CARD_SIZE[0] + (count - 1) * CARD_GAP
+    start_x = WIDTH // 2 - total_width // 2
+
+    for i, key in enumerate(CHARACTER_KEYS):
+        info = CHARACTER_ROSTER[key]
+        rect = pygame.Rect(0, 0, *CARD_SIZE)
+        rect.centerx = start_x + i * (CARD_SIZE[0] + CARD_GAP) + CARD_SIZE[0] // 2
+        rect.centery = HEIGHT // 2 + 40
+
+        preview = load_sprite(info["folder"], f"{info['prefix']}_idle1.png", flip=False)
+        preview = pygame.transform.smoothscale(preview, (int(SPRITE_W * 1.6), int(SPRITE_H * 1.6)))
+
+        cards[key] = {
+            "rect": rect,
+            "preview": preview,
+            "label": info["label"],
+            "color": info["card_color"],
+        }
+
+    return cards
+
+
+CHARACTER_CARDS = build_character_cards()
+
+
+def draw_assignment_badge(label, pos, color):
+    badge = ui_font.render(label, True, BLACK)
+    badge_rect = badge.get_rect(center=pos)
+    pygame.draw.rect(screen, color, badge_rect.inflate(14, 10), border_radius=8)
+    screen.blit(badge, badge_rect)
+
+
+def character_select():
+    active_slot = 1
+    p1_choice = "player1"
+    p2_choice = "player2"
+
+    number_bindings = {getattr(pygame, f"K_{i+1}"): i for i in range(len(CHARACTER_KEYS))}
+
+    while True:
+        for e in pygame.event.get():
+            if e.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+
+            if e.type == pygame.KEYDOWN:
+                if e.key == pygame.K_ESCAPE:
+                    return None
+
+                if e.key in (pygame.K_TAB, pygame.K_SPACE):
+                    active_slot = 2 if active_slot == 1 else 1
+
+                if e.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                    return p1_choice, p2_choice
+
+                if e.key in number_bindings:
+                    idx = number_bindings[e.key]
+                    if idx < len(CHARACTER_KEYS):
+                        selection = CHARACTER_KEYS[idx]
+                        if active_slot == 1:
+                            p1_choice = selection
+                            active_slot = 2
+                        else:
+                            p2_choice = selection
+
+            if e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
+                for key, card in CHARACTER_CARDS.items():
+                    if card["rect"].collidepoint(e.pos):
+                        if active_slot == 1:
+                            p1_choice = key
+                            active_slot = 2
+                        else:
+                            p2_choice = key
+
+        screen.blit(menu_bg, (0, 0))
+
+        title = menu_font.render("Choose Your Fighters", True, WHITE)
+        screen.blit(title, title.get_rect(center=(WIDTH // 2, 80)))
+
+        subtitle = ui_font.render(
+            "Click a card or press 1/2/3. TAB swaps who you're assigning.", True, WHITE
+        )
+        screen.blit(subtitle, subtitle.get_rect(center=(WIDTH // 2, 140)))
+
+        confirm = controls_font.render(
+            "ENTER: lock choices    ESC: back to menu", True, WHITE
+        )
+        screen.blit(confirm, confirm.get_rect(center=(WIDTH // 2, HEIGHT - 40)))
+
+        active_note = button_font.render(f"Assigning Player {active_slot}", True, WHITE)
+        screen.blit(active_note, active_note.get_rect(center=(WIDTH // 2, 200)))
+
+        for key, card in CHARACTER_CARDS.items():
+            rect = card["rect"]
+            base = pygame.Color(*card["color"])
+            pygame.draw.rect(screen, base, rect, border_radius=12)
+
+            is_active_choice = (active_slot == 1 and key == p1_choice) or (
+                active_slot == 2 and key == p2_choice
+            )
+            border_color = (255, 255, 255) if is_active_choice else (30, 30, 40)
+            pygame.draw.rect(screen, border_color, rect, width=4, border_radius=12)
+
+            preview_rect = card["preview"].get_rect(midtop=(rect.centerx, rect.y + 26))
+            screen.blit(card["preview"], preview_rect)
+
+            label = character_card_font.render(card["label"], True, BLACK)
+            screen.blit(label, label.get_rect(center=(rect.centerx, rect.bottom - 70)))
+
+            slot_hint = character_sub_font.render("Press {}".format(CHARACTER_KEYS.index(key) + 1), True, BLACK)
+            screen.blit(slot_hint, slot_hint.get_rect(center=(rect.centerx, rect.bottom - 38)))
+
+            badge_offset = 36
+            if key == p1_choice:
+                draw_assignment_badge("P1", (rect.centerx - badge_offset, rect.bottom - 16), (250, 250, 250))
+            if key == p2_choice:
+                draw_assignment_badge("P2", (rect.centerx + badge_offset, rect.bottom - 16), (250, 220, 120))
+
+        pygame.display.flip()
+        clock.tick(60)
 
 # ----------------------------------------------------------
 # HUD FRAME LOADER  <-- INSERTED HERE
@@ -1608,6 +1779,12 @@ def game_loop():
     while playing:
         selection = main_menu()
 
+        choices = character_select()
+        if choices is None:
+            continue
+
+        p1_choice, p2_choice = choices
+
         p1_ai = selection == "p2"
         p2_ai = selection == "p1"
 
@@ -1618,7 +1795,7 @@ def game_loop():
         match_aborted = False
 
         while p1_score < target_wins and p2_score < target_wins:
-            p1, p2 = create_players()
+            p1, p2 = create_players(p1_choice, p2_choice)
             winner = play_round(
                 p1,
                 p2,
