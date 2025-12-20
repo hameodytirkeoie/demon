@@ -346,7 +346,7 @@ class Bottle:
 # ----------------------------------------------------------
 class Fighter:
     def __init__(self, x, folder, idle, walk, attack, hit, win, flip=False,
-                 melee_key=None, proj_key=None):
+                 melee_key=None, proj_key=None, crouch_key=None, block_key=None):
 
         self.x = x
         self.melee_key = melee_key
@@ -368,6 +368,11 @@ class Fighter:
         # Facing direction
         self.facing_left = flip
         self.folder = folder
+
+        self.crouch_key = crouch_key
+        self.block_key = block_key
+        self.crouching = False
+        self.blocking = False
 
         # -------------------------------
         # DASH SYSTEM
@@ -464,11 +469,14 @@ class Fighter:
     # ----------------------------------------------------------
     # UPDATE (MOVEMENT, JUMP, ATTACK)
     # ----------------------------------------------------------
-    def update(self, keys, left, right, jump, opponent):
+    def update(self, keys, left, right, jump, crouch, block, opponent):
 
         # Face opponent
         if opponent:
             self.facing_left = opponent.rect.centerx < self.rect.centerx
+
+        self.crouching = keys[crouch] and self.on_ground if crouch is not None else False
+        self.blocking = keys[block] and self.on_ground if block is not None else False
 
         # Win animation
         if self.win_timer > 0:
@@ -488,39 +496,40 @@ class Fighter:
         self.check_dash(keys, left, right)
         dash_applied = False
 
-        if self.dash_time > 0:
-            dash_vel = self.dash_speed
-            self.dash_time -= 1
+        if not self.blocking and not self.crouching:
+            if self.dash_time > 0:
+                dash_vel = self.dash_speed
+                self.dash_time -= 1
 
-            if self.dash_dir == -1:
-                self.rect.x -= dash_vel
-                self.vel_x = -dash_vel
-                moving = True
-                dash_applied = True
+                if self.dash_dir == -1:
+                    self.rect.x -= dash_vel
+                    self.vel_x = -dash_vel
+                    moving = True
+                    dash_applied = True
 
-            elif self.dash_dir == 1:
-                self.rect.x += dash_vel
-                self.vel_x = dash_vel
-                moving = True
-                dash_applied = True
+                elif self.dash_dir == 1:
+                    self.rect.x += dash_vel
+                    self.vel_x = dash_vel
+                    moving = True
+                    dash_applied = True
 
-        # NORMAL MOVE
-        if not dash_applied:
-            self.vel_x = 0
-            if keys[left]:
-                self.rect.x -= self.velocity
-                self.vel_x = -self.velocity
-                moving = True
-            if keys[right]:
-                self.rect.x += self.velocity
-                self.vel_x = self.velocity
-                moving = True
+            # NORMAL MOVE
+            if not dash_applied:
+                self.vel_x = 0
+                if keys[left]:
+                    self.rect.x -= self.velocity
+                    self.vel_x = -self.velocity
+                    moving = True
+                if keys[right]:
+                    self.rect.x += self.velocity
+                    self.vel_x = self.velocity
+                    moving = True
 
         # Screen bounds
         self.rect.x = max(0, min(self.rect.x, WIDTH - self.rect.width))
 
         # JUMP
-        if keys[jump] and self.on_ground:
+        if keys[jump] and self.on_ground and not self.blocking:
             self.vel_y = -12
             self.on_ground = False
 
@@ -537,16 +546,16 @@ class Fighter:
         if self.proj_cool > 0: self.proj_cool -= 1
 
         # MELEE
-        if keys[self.melee_key] and self.attack_cool == 0:
+        if keys[self.melee_key] and self.attack_cool == 0 and not self.blocking:
             self.attack_cool = 18
             self.state = "attack"
 
             if self.rect.colliderect(opponent.rect):
-                opponent.health -= 10
-                opponent.set_hit()
+                attack_dir = -1 if self.facing_left else 1
+                opponent.take_hit(10, attack_dir)
 
         # PROJECTILE
-        elif keys[self.proj_key] and self.attack_cool == 0 and self.proj_cool == 0:
+        elif keys[self.proj_key] and self.attack_cool == 0 and self.proj_cool == 0 and not self.blocking:
             if not self.proj_charging:
                 self.proj_charging = True
                 self.proj_charge = 0
@@ -572,8 +581,13 @@ class Fighter:
             self.animate(self.idle_frames, self.idle_frames_flipped, self.idle_speed)
         elif self.state == "walk":
             self.animate(self.walk_frames, self.walk_frames_flipped, 8)
-        elif self.state == "attack":
-            self.animate(self.attack_frames, self.attack_frames_flipped, 6)
+
+        elif self.blocking:
+            self.state = "block"
+        elif self.crouching:
+            self.state = "crouch"
+        else:
+            self.state = "walk" if moving else "idle"
 
     # ----------------------------------------------------------
     # ANIMATION HANDLER (ONLY ONE!)
@@ -599,6 +613,16 @@ class Fighter:
     def draw(self, surf):
         surf.blit(self.image, self.rect.topleft)
 
+    def take_hit(self, damage, attack_dir=0):
+        if self.blocking and self.on_ground:
+            reduced = max(1, int(damage * 0.25))
+            self.health -= reduced
+            self.state = "block"
+            self.frame = 0
+            return
+
+        self.health -= damage
+        self.set_hit()
 # ----------------------------------------------------------
 # CREATE PLAYERS
 # ----------------------------------------------------------
@@ -620,7 +644,9 @@ def create_players():
         p1_idle, p1_walk, p1_attack, p1_hit, p1_win,
         flip=False,
         melee_key=pygame.K_SPACE,
-        proj_key=pygame.K_q
+        proj_key=pygame.K_q,
+        crouch_key=pygame.K_s,
+        block_key=pygame.K_LSHIFT,
     )
 
     p2 = Fighter(
@@ -628,7 +654,9 @@ def create_players():
         p2_idle, p2_walk, p2_attack, p2_hit, p2_win,
         flip=True,
         melee_key=pygame.K_RETURN,
-        proj_key=pygame.K_p
+        proj_key=pygame.K_p,
+        crouch_key=pygame.K_DOWN,
+        block_key=pygame.K_RSHIFT,
     )
 
     return p1, p2
@@ -1171,12 +1199,12 @@ single_p1_prompt = controls_font.render("Press 1 to play as Player 1 (Player 2 u
 single_p2_prompt = controls_font.render("Press 2 to play as Player 2 (Player 1 uses AI)", True, WHITE)
 options_prompt = controls_font.render("Press O to tweak rounds, timer, and AI", True, WHITE)
 p1_controls = [
-    controls_font.render("Player 1: Move A/D, Jump W", True, WHITE),
-    controls_font.render("Melee: SPACE  |  Throw: Q", True, WHITE),
-]   
+    controls_font.render("Player 1: Move A/D, Jump W, Crouch S", True, WHITE),
+    controls_font.render("Melee: SPACE  |  Throw: Q  |  Block: Left Shift", True, WHITE),
+] 
 p2_controls = [
-    controls_font.render("Player 2: Move ←/→, Jump ↑", True, WHITE),
-    controls_font.render("Melee: ENTER  |  Throw: P", True, WHITE)
+    controls_font.render("Player 2: Move ←/→, Jump ↑, Crouch ↓", True, WHITE),
+    controls_font.render("Melee: ENTER  |  Throw: P  |  Block: Right Shift", True, WHITE)
 ]
 
 title_pos = menu_title.get_rect(center=(WIDTH // 2, 80))
@@ -1454,6 +1482,10 @@ def play_round(p1, p2, p1_ai=False, p2_ai=False, round_score=None, target_wins=N
     sudden_death = False
     paused = False
 
+    # Ensure both fighters start a round facing each other (prevents intro pose bugs)
+    p1.facing_left = p2.rect.centerx < p1.rect.centerx
+    p2.facing_left = p1.rect.centerx < p2.rect.centerx
+
     run_round_countdown(p1, p2, time_left, round_score=round_score, target_wins=target_wins)
 
     while True:
@@ -1489,8 +1521,8 @@ def play_round(p1, p2, p1_ai=False, p2_ai=False, round_score=None, target_wins=N
         p2_inputs = keys if not p2_ai else build_ai_inputs(p2, p1, pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, aggression=settings.ai_aggression)
 
         # update
-        p1.update(p1_inputs, pygame.K_a, pygame.K_d, pygame.K_w, p2)
-        p2.update(p2_inputs, pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, p1)
+        p1.update(p1_inputs, pygame.K_a, pygame.K_d, pygame.K_w, pygame.K_s, pygame.K_LSHIFT, p2)
+        p2.update(p2_inputs, pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, pygame.K_DOWN, pygame.K_RSHIFT, p1)
         if p1.just_shot:
             direction = -1 if p1.facing_left else 1
             bottles.append(Bottle(p1.rect.centerx, p1.rect.y, direction, power=p1.just_shot_power))
@@ -1504,8 +1536,7 @@ def play_round(p1, p2, p1_ai=False, p2_ai=False, round_score=None, target_wins=N
         for p in projectiles[:]:
             p.update()
             if p.rect.colliderect(p1.rect):
-                p1.health -= 5
-                p1.set_hit()
+                p1.take_hit(5, -1 if p.speed > 0 else 1)
                 projectiles.remove(p)
             elif not p.active:
                 projectiles.remove(p)
@@ -1519,8 +1550,7 @@ def play_round(p1, p2, p1_ai=False, p2_ai=False, round_score=None, target_wins=N
             if not prev_hit and b.hit:
                 hitbox = pygame.Rect(b.x, b.y, 40, 40)
                 if hitbox.colliderect(p2.rect):
-                    p2.health -= 15
-                    p2.set_hit()
+                    p2.take_hit(15, -1 if b.vx > 0 else 1)
 
             # remove bottle
             if b.dead:
