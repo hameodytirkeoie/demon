@@ -1031,7 +1031,7 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key, aggression
         CORNER_TRAP = False
         WHIFF_PUNISH = False
         ANTI_AIR = 0.20
-        FAKEOUT = 0.04
+        FAKEOUT = 0.02
 
     elif diff == "sweaty":
         MELEE_BASE = 0.65
@@ -1043,7 +1043,7 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key, aggression
         CORNER_TRAP = False
         WHIFF_PUNISH = True
         ANTI_AIR = 0.45
-        FAKEOUT = 0.05
+        FAKEOUT = 0.03
 
     elif diff == "bigboy":
         MELEE_BASE = 0.90
@@ -1055,7 +1055,7 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key, aggression
         CORNER_TRAP = True
         WHIFF_PUNISH = True
         ANTI_AIR = 0.75
-        FAKEOUT = 0.03
+        FAKEOUT = 0.01
 
     else:  # doumi gang
         MELEE_BASE = 0.98
@@ -1067,7 +1067,7 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key, aggression
         CORNER_TRAP = True
         WHIFF_PUNISH = True
         ANTI_AIR = 0.92
-        FAKEOUT = 0.01
+        FAKEOUT = 0.00
 
     SPACING_LO = 80
     SPACING_HI = 170
@@ -1266,10 +1266,10 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key, aggression
     else:
         fighter.idle_frames_since_action = min(240, fighter.idle_frames_since_action + 1)
 
-    if not dodging and fighter.idle_frames_since_action > 50:
+    if not dodging and fighter.idle_frames_since_action > 12:
         pressed.add(right_key if moving_right else left_key)
 
-    if not dodging and fighter.idle_frames_since_action > 80 and fighter.attack_cool == 0:
+    if not dodging and fighter.idle_frames_since_action > 24 and fighter.attack_cool == 0:
         if in_melee:
             pressed.add(fighter.melee_key)
         elif distance < 200 and fighter.proj_cool == 0:
@@ -1311,6 +1311,28 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key, aggression
         if fighter.character_key == "player2" and 120 < distance < 210 and not opp_cornered:
             if random.random() < THROW * 0.75:
                 pressed.add(fighter.proj_key)
+
+    # ----------------------------------------
+    # BERSERK BACKSTOP (never idle)
+    # ----------------------------------------
+    # The AI should always be closing distance or throwing hands. If no other
+    # logic produced an input (common when both fighters are airborne or reset
+    # to opposite corners), force a forward push and pick the most aggressive
+    # attack available.
+    if not pressed:
+        preferred = right_key if moving_right else left_key
+        pressed.add(preferred)
+
+        if fighter.attack_cool == 0:
+            if distance < 190 or fighter.proj_cool > 0:
+                pressed.add(fighter.melee_key)
+            elif fighter.proj_cool == 0:
+                pressed.add(fighter.proj_key)
+        elif fighter.proj_cool == 0 and distance > 160:
+            pressed.add(fighter.proj_key)
+
+        if not fighter.on_ground and random.random() < 0.35:
+            pressed.add(jump_key)
 
     # ----------------------------------------------------------
     # ADVANCED DASH MIXUPS (bigboy + doumi gang only)
@@ -1882,8 +1904,15 @@ def run_round_countdown(p1, p2, starting_time, round_score=None, target_wins=Non
 # ----------------------------------------------------------
 # ROUND MESSAGES
 # ----------------------------------------------------------
-def show_round_message(title, subtitle=None, duration_ms=1400):
-    """Overlay a simple, centered message for a short duration."""
+def show_round_message(title, subtitle=None, duration_ms=1400, fighters=None):
+    """Overlay a simple, centered message for a short duration.
+
+    When fighters are provided, keep drawing them (and advancing their win
+    animations) underneath the banner so the victory pose is the last thing on
+    screen before the game transitions to the next state.
+    """
+
+    fighters = fighters or []
 
     title_surf = render_pixel_text(title, WHITE, 4)
     title_rect = title_surf.get_rect(center=(WIDTH // 2, HEIGHT // 2 - 10))
@@ -1895,6 +1924,11 @@ def show_round_message(title, subtitle=None, duration_ms=1400):
                 sys.exit()
 
         screen.blit(bg, (0, 0))
+
+        for fighter in fighters:
+            if fighter.state == "win":
+                fighter.animate(fighter.win_frames, fighter.win_frames_flipped, 12)
+            fighter.draw(screen)
 
         outline = title_surf.copy()
         outline.fill((0, 0, 0), special_flags=pygame.BLEND_RGBA_MULT)
@@ -2153,7 +2187,11 @@ def game_loop():
                 p2_score += 1
                 p2.set_win()
 
-            show_round_message(round_winner_text, "you win big boy negative aura")
+            show_round_message(
+                round_winner_text,
+                "you win big boy negative aura",
+                fighters=(p1, p2),
+            )
 
         if match_aborted:
             continue
