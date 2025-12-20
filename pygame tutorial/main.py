@@ -347,11 +347,9 @@ class Pencil:
         self.rect.x += self.speed
         if self.rect.right < 0 or self.rect.left > WIDTH:
             self.active = False
-        self.owner = owner
 
     def draw(self, surf):
         pygame.draw.rect(surf, YELLOW, self.rect)
-
         # pencil tip
         tip = pygame.Rect(self.rect.right - 3, self.rect.y, 3, 4)
         pygame.draw.rect(surf, (120, 80, 20), tip)
