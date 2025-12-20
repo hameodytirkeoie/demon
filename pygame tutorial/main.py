@@ -346,6 +346,7 @@ class Pencil:
         self.speed = 12 * direction
         self.direction = direction      # <── REQUIRED FOR AI
         self.active = True
+        self.owner = owner
 
     def update(self):
         self.rect.x += self.speed
@@ -429,6 +430,27 @@ class Bottle:
             surf.blit(self.broken, (self.x, self.y))
         else:
             surf.blit(self.img, (self.x, self.y))
+
+
+def apply_bottle_shatter_damage(bottle, targets):
+    """Apply bottle shatter damage to any non-owner fighters it overlaps."""
+
+    if not bottle.hit:
+        return []
+
+    hit_targets = []
+    hitbox = pygame.Rect(bottle.x, bottle.y, 40, 40)
+    knock_dir = -1 if bottle.vx > 0 else 1
+
+    for target in targets:
+        if target is bottle.owner:
+            continue
+
+        if hitbox.colliderect(target.rect):
+            target.take_hit(15, knock_dir)
+            hit_targets.append(target)
+
+    return hit_targets
 
 
 class KickWave:
@@ -1941,9 +1963,7 @@ def play_round(p1, p2, p1_ai=False, p2_ai=False, round_score=None, target_wins=N
 
             # bottle shatter hit detection
             if not prev_hit and b.hit:
-                hitbox = pygame.Rect(b.x, b.y, 40, 40)
-                if hitbox.colliderect(p2.rect):
-                    p2.take_hit(15, -1 if b.vx > 0 else 1)
+                apply_bottle_shatter_damage(b, (p1, p2))
 
             # remove bottle
             if b.dead:
