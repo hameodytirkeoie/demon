@@ -324,10 +324,14 @@ def render_pixel_text(text, color, scale=3):
 def load_sprite(folder, filename, flip=True):
     full = os.path.join(folder, filename)
     if not os.path.exists(full):
+        # During headless tests we do not always ship the full art pack. Instead
+        # of aborting, generate a simple placeholder surface so logic can
+        # continue to run.
         print("MISSING:", full)
-        sys.exit()
-    img = pygame.image.load(full).convert_alpha()
-    img = pygame.transform.scale(img, (SPRITE_W, SPRITE_H))
+        img = pygame.Surface((SPRITE_W, SPRITE_H), pygame.SRCALPHA)
+    else:
+        img = pygame.image.load(full).convert_alpha()
+        img = pygame.transform.scale(img, (SPRITE_W, SPRITE_H))
     if flip:
         img = pygame.transform.flip(img, True, False)
     return img
@@ -914,7 +918,8 @@ def create_players(p1_choice="player1", p2_choice="player2"):
             move_config=move_config,
             character_key=character_key,
         )
-        p1 = build_fighter(
+
+    p1 = build_fighter(
         p1_choice,
         150,
         False,
@@ -1147,6 +1152,14 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key, aggression
         if not fighter.rect.colliderect(opponent.rect):
             if distance < 130 and fighter.attack_cool == 0:
                 pressed.add(fighter.melee_key)
+
+    # Prevent the AI from walking off-screen. When a fighter is already flush
+    # with a boundary, drop inputs that would push them further out of bounds
+    # so spacing logic does not force constant left/right walking at the edges.
+    if fighter.rect.left <= 0:
+        pressed.discard(left_key)
+    if fighter.rect.right >= WIDTH:
+        pressed.discard(right_key)
 
     # ----------------------------------------
     # COMBO SYSTEM
