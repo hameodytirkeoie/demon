@@ -568,6 +568,9 @@ class Fighter:
         # AI fields
         self.combo_step = 0
         self.last_hit_timer = 0
+        self.input_buffer = set()
+        self.buffer_timer = 0
+        self.idle_frames_since_action = 0
 
         # Facing direction
         self.facing_left = flip
@@ -996,7 +999,12 @@ class InputState:
 # CLEAN + FINAL AI SYSTEM  
 # ----------------------------------------------------------
 def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key, aggression=1.0):
-    pressed = set()
+    # Carry over buffered inputs so the AI holds buttons for a few frames,
+    # mimicking how a human commits to a jump or attack instead of frame-perfect
+    # tap dancing.
+    pressed = set(getattr(fighter, "input_buffer", set())) if getattr(fighter, "buffer_timer", 0) > 0 else set()
+    if getattr(fighter, "buffer_timer", 0) > 0:
+        fighter.buffer_timer -= 1
 
     # ----------------------------------------
     # BASE INFO
@@ -1004,6 +1012,7 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key, aggression
     dx = opponent.rect.centerx - fighter.rect.centerx
     distance = abs(dx)
     moving_right = dx > 0
+
 
     fighter.facing_left = opponent.rect.centerx < fighter.rect.centerx
 
@@ -1063,9 +1072,13 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key, aggression
     # ----------------------------------------
     # AGGRESSION SCALING
     # ----------------------------------------
-    MELEE = min(1.0, MELEE_BASE * aggression)
-    COMBO = min(1.0, COMBO_BASE * aggression)
-    THROW = min(1.0, THROW_BASE * aggression)
+    health_delta = opponent.health - fighter.health
+    clutch_bonus = 0.12 if opponent.health < 35 else 0.0
+    survival_penalty = 0.12 if fighter.health < 25 and opponent.health > fighter.health else 0.0
+
+    MELEE = min(1.0, MELEE_BASE * aggression + clutch_bonus - survival_penalty)
+    COMBO = min(1.0, COMBO_BASE * aggression + clutch_bonus * 0.7 - survival_penalty * 0.5)
+    THROW = min(1.0, THROW_BASE * aggression + max(0, -health_delta) * 0.002)
     DODGE = min(1.0, DODGE_BASE * aggression)
 
     SPACING_LO = 80
@@ -1131,15 +1144,20 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key, aggression
                 pressed.add(jump_key)
 
         # Pressure if OPPONENT is cornered
-        elif CORNER_TRAP and opp_cornered:
+        elif opp_cornered:
+            preferred = right_key if moving_right else left_key
+            escape = left_key if moving_right else right_key
+
             if distance > 90:
-                pressed.add(right_key if moving_right else left_key)
+                pressed.add(preferred)
             elif distance < 65:
-                pressed.add(left_key if moving_right else right_key)
+                pressed.add(escape)
 
+            # Even on lower difficulties, add a gentle forward bias so the AI
+            # will actually contest players hiding in the corners instead of
+            # pacing back and forth out of range.
             if random.random() < 0.25:
-                pressed.add(right_key if moving_right else left_key)
-
+                pressed.add(preferred)
         else:
             # Normal spacing
             if distance > SPACING_HI:
@@ -1196,9 +1214,11 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key, aggression
     # Prevent the AI from walking off-screen. When a fighter is already flush
     # with a boundary, drop inputs that would push them further out of bounds
     # so spacing logic does not force constant left/right walking at the edges.
-    if fighter.rect.left <= 0:
+    # Preserve forward pressure when chasing an opponent in the corner so the
+    # bot doesn't give up just before reaching melee range.
+    if fighter.rect.left <= 0 and moving_right:
         pressed.discard(left_key)
-    if fighter.rect.right >= WIDTH:
+    if fighter.rect.right >= WIDTH and not moving_right:
         pressed.discard(right_key)
 
     # ----------------------------------------
@@ -1228,6 +1248,23 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key, aggression
 
     if distance > 120:
         fighter.combo_step = 0
+
+    # ----------------------------------------
+    # BREAK OUT OF PASSIVITY
+    # ----------------------------------------
+    if pressed:
+        fighter.idle_frames_since_action = 0
+    else:
+        fighter.idle_frames_since_action = min(240, fighter.idle_frames_since_action + 1)
+
+    if not dodging and fighter.idle_frames_since_action > 50:
+        pressed.add(right_key if moving_right else left_key)
+
+    if not dodging and fighter.idle_frames_since_action > 80 and fighter.attack_cool == 0:
+        if in_melee:
+            pressed.add(fighter.melee_key)
+        elif distance < 200 and fighter.proj_cool == 0:
+            pressed.add(fighter.proj_key)
 
     # ----------------------------------------
     # RAW MELEE
@@ -1339,6 +1376,22 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key, aggression
             if random.random() < 0.40:
                 pressed.add(fighter.melee_key)
 
+    committed_action = any(
+        key in pressed
+        for key in (
+            fighter.melee_key,
+            fighter.proj_key,
+            jump_key,
+        )
+    ) or getattr(fighter, "dash_time", 0) > 0
+
+    if committed_action:
+        fighter.input_buffer = set(pressed)
+        fighter.buffer_timer = random.randint(2, 4)
+    else:
+        fighter.input_buffer = set(pressed)
+        fighter.buffer_timer = 0
+
     return InputState(pressed)
 # ----------------------------------------------------------
 # DRAW UI (HEALTH + TIMER)
@@ -1445,23 +1498,6 @@ def draw_ui(p1, p2, time_left, countdown_text=None, round_score=None, target_win
         score_shadow = score_surface.copy()
         score_shadow.fill((0, 0, 0), special_flags=pygame.BLEND_RGBA_MULT)
 
-        screen.blit(score_shadow, score_rect.move(2, 2))
-        screen.blit(score_surface, score_rect)
-
-    # Timer panel
-    timer_rect = pygame.Rect(WIDTH // 2 - 70, 12, 140, 48)
-    timer_label = countdown_text if countdown_text is not None else str(time_left)
-    timer_surface = render_pixel_text(timer_label.rjust(2, " "), WHITE, 3)
-    text_pos = timer_surface.get_rect(center=(timer_rect.centerx, timer_rect.y + timer_rect.h - 20))
-    screen.blit(timer_surface, text_pos)
-
-    if round_score is not None:
-        p1_score, p2_score = round_score
-        score_text = f"Rounds  P1: {p1_score}/{target_wins}  |  P2: {p2_score}/{target_wins}"
-        score_surface = ui_font.render(score_text, True, WHITE)
-        score_rect = score_surface.get_rect(center=(WIDTH // 2, timer_rect.bottom + 20))
-        score_shadow = score_surface.copy()
-        score_shadow.fill((0, 0, 0), special_flags=pygame.BLEND_RGBA_MULT)
         screen.blit(score_shadow, score_rect.move(2, 2))
         screen.blit(score_surface, score_rect)
 # ----------------------------------------------------------
@@ -2058,7 +2094,7 @@ def game_loop():
 
         global HUD_FRAMES_P1, HUD_FRAMES_P2
         HUD_FRAMES_P1 = build_character_hud_frames(p1_choice, mirror=False)
-        HUD_FRAMES_P2 = build_character_hud_frames(p2_choice, mirror=True)
+        HUD_FRAMES_P2 = build_character_hud_frames(p2_choice, mirror=False)
 
         p1_ai = selection == "p2"
         p2_ai = selection == "p1"
