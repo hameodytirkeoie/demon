@@ -134,20 +134,30 @@ TIMER_PANEL_IMG = load_ui_image(os.path.join(assets_dir, "timer_panel.png"), (14
 HUD_FRAME_SIZE = (330, 220)
 
 
-def clean_hud_frame(frame):
-    """Remove bright, flat backgrounds so HUD art blends with the scene."""
-    frame = frame.convert_alpha()
+def remove_flat_background(surface, threshold=245):
+    """Colorkey surfaces that ship with a bright, uniform backdrop.
 
-    corner_color = frame.get_at((0, 0))
+    Many sprite exports (especially for Player 3) include an opaque white
+    background. Sampling the top-left pixel is usually sufficient to detect
+    that canvas color; when it is bright enough, treat it as a colorkey so the
+    art can blend with the stage and HUD without a boxy outline.
+    """
+
+    surface = surface.convert_alpha()
+    corner_color = surface.get_at((0, 0))
     avg = (corner_color.r + corner_color.g + corner_color.b) / 3
 
-    # Most exported HUD art uses a flat white canvas. Treat that color as a
-    # colorkey so the surrounding area becomes transparent when blitted.
-    if corner_color.a == 255 and avg > 245:
-        frame.set_colorkey((corner_color.r, corner_color.g, corner_color.b))
+    if corner_color.a == 255 and avg >= threshold:
+        surface = surface.copy()
+        surface.set_colorkey((corner_color.r, corner_color.g, corner_color.b))
 
-    return frame
+    return surface
 
+
+def clean_hud_frame(frame):
+    """Remove bright, flat backgrounds so HUD art blends with the scene."""
+
+    return remove_flat_background(frame)
 
 def normalize_hud_frame(frame, target_size, mirror=False):
     """Scale HUD art to fit the target canvas without stretching.
@@ -332,11 +342,12 @@ def load_sprite(folder, filename, flip=True):
     else:
         img = pygame.image.load(full).convert_alpha()
         img = pygame.transform.scale(img, (SPRITE_W, SPRITE_H))
+
+    if folder == BASE_P3:
+        img = remove_flat_background(img, threshold=230)
     if flip:
         img = pygame.transform.flip(img, True, False)
     return img
-
-
 # ----------------------------------------------------------
 # PROJECTILES
 # ----------------------------------------------------------
@@ -439,13 +450,17 @@ def apply_bottle_shatter_damage(bottle, targets):
         return []
 
     hit_targets = []
-    hitbox = pygame.Rect(bottle.x, bottle.y, 40, 40)
-    knock_dir = -1 if bottle.vx > 0 else 1
+    # Use the bottle's current footprint for collision instead of a hard-coded
+    # rectangle so the shatter hitbox lines up with the sprite swap that occurs
+    # when the bottle breaks. The original throw direction is preserved even
+    # after velocities are zeroed on impact so knockback is applied consistently
+    # to targets on either side of the thrower.
+    hitbox = pygame.Rect(bottle.x, bottle.y, bottle.width, bottle.height)
+    knock_dir = bottle.direction if getattr(bottle, "direction", 0) else (-1 if bottle.vx > 0 else 1)
 
     for target in targets:
         if target is bottle.owner:
             continue
-
         if hitbox.colliderect(target.rect):
             target.take_hit(15, knock_dir)
             hit_targets.append(target)
@@ -540,6 +555,7 @@ class Fighter:
         self.projectile_cooldown = move_config.get("projectile_cooldown", 60)
         self.projectile_attack_cooldown = move_config.get("projectile_attack_cooldown", 20)
         self.max_proj_charge = move_config.get("max_proj_charge", 45)
+        self.animation_speed_scale = move_config.get("animation_speed_scale", 1.0)
 
         self.projectile_factory = move_config.get("projectile_factory")
 
@@ -833,8 +849,10 @@ class Fighter:
     def animate(self, frames, frames_flipped, speed):
         frame_list = frames_flipped if self.facing_left else frames
 
+        scaled_speed = max(1, int(round(speed * self.animation_speed_scale)))
+
         self.counter += 1
-        if self.counter >= speed:
+        if self.counter >= scaled_speed:
             self.counter = 0
             self.frame += 1
 
@@ -899,8 +917,8 @@ def create_players(p1_choice="player1", p2_choice="player2"):
             "projectile_factory": build_kickwave,
             "max_proj_charge": 32,
             "speed": 6,
+            "animation_speed_scale": 1.35,
         }
-
     def build_sprite_sets(character_key, prefix):
         if character_key == "player3":
             idle = [f"{prefix}_idle{i}.png" for i in range(1, 5)]
