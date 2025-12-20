@@ -62,14 +62,43 @@ CHARACTER_ROSTER = {
         "prefix": "p2",
         "card_color": (255, 140, 180),
     },
-    "player3": {
-        "label": "player Three",
-        "folder": BASE_P3,
-        "prefix": "p2",
-        "card_color": (140, 220, 140),
-    },
 }
 
+
+def filter_character_roster(roster):
+    """Drop characters whose asset folders or idle sprites are missing.
+
+    The menu builds previews from each fighter's `<prefix>_idle1.png` sprite. If
+    the folder or base frame is missing, `load_sprite` exits the game and the
+    menu never renders. Filtering the roster up front keeps the selection screen
+    resilient to incomplete asset packs.
+    """
+
+    filtered = {}
+
+    for key, data in roster.items():
+        folder = data.get("folder")
+        prefix = data.get("prefix")
+
+        if not folder or not prefix:
+            continue
+
+        idle_path = os.path.join(folder, f"{prefix}_idle1.png")
+
+        if not os.path.isdir(folder):
+            print(f"[WARN] Skipping {key}: missing folder {folder}")
+            continue
+
+        if not os.path.exists(idle_path):
+            print(f"[WARN] Skipping {key}: missing idle sprite {idle_path}")
+            continue
+
+        filtered[key] = data
+
+    return filtered
+
+
+CHARACTER_ROSTER = filter_character_roster(CHARACTER_ROSTER)
 # ----------------------------------------------------------
 # BACKGROUNDS
 # ----------------------------------------------------------
