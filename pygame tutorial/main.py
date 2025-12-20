@@ -337,7 +337,7 @@ def load_sprite(folder, filename, flip=True):
 # PROJECTILES
 # ----------------------------------------------------------
 class Pencil:
-    def __init__(self, x, y, direction):
+    def __init__(self, x, y, direction, owner=None):
         self.rect = pygame.Rect(x, y, 20, 4)
         self.speed = 12 * direction
         self.direction = direction      # <── REQUIRED FOR AI
@@ -485,6 +485,7 @@ class Fighter:
         folder,
         idle,
         walk,
+        run,
         attack,
         hit,
         win,
@@ -561,6 +562,7 @@ class Fighter:
         self.idle_frames, self.idle_frames_flipped = load_frames(idle)
         self.walk_frames, self.walk_frames_flipped = load_frames(walk)
         self.attack_frames, self.attack_frames_flipped = load_frames(attack)
+        self.run_frames, self.run_frames_flipped = load_frames(run or walk)
         self.hit_frames, self.hit_frames_flipped = load_frames(hit)
         self.win_frames, self.win_frames_flipped = load_frames(win)
 
@@ -749,6 +751,42 @@ class Fighter:
         else:
             self.state = "walk" if moving else "idle"
 
+        if self.blocking:
+            self.state = "block"
+        elif self.crouching and self.on_ground:
+            self.state = "crouch"
+        elif self.state not in ["attack", "hit", "win"]:
+            if dash_applied:
+                self.state = "run"
+            else:
+                self.state = "walk" if moving else "idle"
+
+        # ANIMATION
+        if self.state == "idle":
+            self.animate(self.idle_frames, self.idle_frames_flipped, self.idle_speed)
+        elif self.state == "walk":
+            self.animate(self.walk_frames, self.walk_frames_flipped, 11)
+        elif self.state == "run":
+            self.animate(self.run_frames, self.run_frames_flipped, 7)
+        elif self.state == "attack":
+            self.animate(self.attack_frames, self.attack_frames_flipped, 9)
+        elif self.blocking:
+            self.state = "block"
+            self.image = (
+                self.idle_frames_flipped[0]
+                if self.facing_left
+                else self.idle_frames[0]
+            )
+        elif self.crouching:
+            self.state = "crouch"
+            self.image = (
+                self.idle_frames_flipped[0]
+                if self.facing_left
+                else self.idle_frames[0]
+            )
+        else:
+            self.state = "walk" if moving else "idle"
+
     def spawn_projectile(self):
         if not self.just_shot or not self.projectile_factory:
             return None
@@ -764,19 +802,6 @@ class Fighter:
         self.just_shot_power = 1.0
 
         return projectile
-
-        # ANIMATION
-        if self.state == "idle":
-            self.animate(self.idle_frames, self.idle_frames_flipped, self.idle_speed)
-        elif self.state == "walk":
-            self.animate(self.walk_frames, self.walk_frames_flipped, 11)
-
-        elif self.blocking:
-            self.state = "block"
-        elif self.crouching:
-            self.state = "crouch"
-        else:
-            self.state = "walk" if moving else "idle"
 
     # ----------------------------------------------------------
     # ANIMATION HANDLER (ONLY ONE!)
@@ -812,9 +837,6 @@ class Fighter:
 
         self.health -= damage
         self.set_hit()
-# ----------------------------------------------------------
-# CREATE PLAYERS
-# ----------------------------------------------------------
 # ----------------------------------------------------------
 # CREATE PLAYERS
 # ----------------------------------------------------------
@@ -855,17 +877,26 @@ def create_players(p1_choice="player1", p2_choice="player2"):
             "speed": 6,
         }
 
-    def build_sprite_sets(prefix):
-        idle = [f"{prefix}_idle1.png", f"{prefix}_idle2.png"]
-        walk = [f"{prefix}_walk1.png"]
+    def build_sprite_sets(character_key, prefix):
+        if character_key == "player3":
+            idle = [f"{prefix}_idle{i}.png" for i in range(1, 5)]
+            walk = [f"{prefix}_walk{i}.png" for i in range(1, 5)]
+            run = [f"{prefix}_run{i}.png" for i in range(1, 4)]
+        else:
+            idle = [f"{prefix}_idle1.png", f"{prefix}_idle2.png"]
+            walk = [f"{prefix}_walk1.png", f"{prefix}_walk2.png"]
+            run = walk
+
         attack = [f"{prefix}_attack1.png", f"{prefix}_attack2.png"]
         hit = [f"{prefix}_hit1.png", f"{prefix}_hit2.png"]
         win = [f"{prefix}_win1.png"]
-        return idle, walk, attack, hit, win
+        return idle, walk, run, attack, hit, win
 
     def build_fighter(character_key, x, flip, melee_key, proj_key, crouch_key, block_key):
         data = CHARACTER_ROSTER.get(character_key, CHARACTER_ROSTER["player1"])
-        idle, walk, attack, hit, win = build_sprite_sets(data["prefix"])
+        idle, walk, run, attack, hit, win = build_sprite_sets(
+            character_key, data["prefix"]
+        )
         move_config = build_move_config(character_key)
 
         return Fighter(
@@ -873,6 +904,7 @@ def create_players(p1_choice="player1", p2_choice="player2"):
             data["folder"],
             idle,
             walk,
+            run,
             attack,
             hit,
             win,
@@ -884,7 +916,7 @@ def create_players(p1_choice="player1", p2_choice="player2"):
             move_config=move_config,
             character_key=character_key,
         )
-    p1 = build_fighter(
+        p1 = build_fighter(
         p1_choice,
         150,
         False,
