@@ -347,6 +347,7 @@ class Pencil:
         self.rect.x += self.speed
         if self.rect.right < 0 or self.rect.left > WIDTH:
             self.active = False
+        self.owner = owner
 
     def draw(self, surf):
         pygame.draw.rect(surf, YELLOW, self.rect)
@@ -356,7 +357,7 @@ class Pencil:
         pygame.draw.rect(surf, (120, 80, 20), tip)
 
 class Bottle:
-    def __init__(self, x, y, direction, power=1.0):
+    def __init__(self, x, y, direction, power=1.0, owner=None):
 
         self.x = x
         self.y = y
@@ -368,6 +369,8 @@ class Bottle:
         self.vx = 8 * speed_scale * direction
         self.vy = -8 - 4 * speed_scale
         self.gravity = 0.5
+        self.owner = owner
+
 
         # Sprites
         img = pygame.image.load(os.path.join(BASE_P1, "p1_bottle1.png")).convert_alpha()
@@ -427,13 +430,14 @@ class Bottle:
 
 
 class KickWave:
-    def __init__(self, x, y, direction, power=1.0):
+    def __init__(self, x, y, direction, power=1.0, owner=None):
 
         base_speed = 9 + int(3 * power)
         self.speed = base_speed * direction
         self.direction = direction
         self.damage = 8 + int(4 * power)
         self.active = True
+        self.owner = owner
 
         self.rect = pygame.Rect(x, y, 36, 22)
         self.trail = []
@@ -458,12 +462,12 @@ class KickWave:
 
 
 def build_bottle_throw(fighter, direction, power):
-    return Bottle(fighter.rect.centerx, fighter.rect.y, direction, power=power)
+    return Bottle(fighter.rect.centerx, fighter.rect.y, direction, power=power, owner=fighter)
 
 
 def build_pencil_throw(fighter, direction, power):
     start_x = fighter.rect.left if direction == -1 else fighter.rect.right - 20
-    return Pencil(start_x, fighter.rect.centery, direction)
+    return Pencil(start_x, fighter.rect.centery, direction, owner=fighter)
 
 
 def build_kickwave(fighter, direction, power):
@@ -506,6 +510,8 @@ class Fighter:
 
         self.melee_damage = move_config.get("melee_damage", 10)
         self.melee_cooldown = move_config.get("melee_cooldown", 18)
+        self.kick_damage = move_config.get("kick_damage")
+        self.kick_cooldown = move_config.get("kick_cooldown")
         self.projectile_cooldown = move_config.get("projectile_cooldown", 60)
         self.projectile_attack_cooldown = move_config.get("projectile_attack_cooldown", 20)
         self.max_proj_charge = move_config.get("max_proj_charge", 45)
@@ -622,6 +628,15 @@ class Fighter:
         self.frame = 0
         self.win_timer = 999
 
+    def _perform_melee(self, damage, cooldown, opponent):
+        self.attack_cool = cooldown
+        self.state = "attack"
+
+        if self.rect.colliderect(opponent.rect):
+            attack_dir = -1 if self.facing_left else 1
+            opponent.take_hit(damage, attack_dir)
+
+
     # ----------------------------------------------------------
     # UPDATE (MOVEMENT, JUMP, ATTACK)
     # ----------------------------------------------------------
@@ -701,14 +716,16 @@ class Fighter:
         if self.attack_cool > 0: self.attack_cool -= 1
         if self.proj_cool > 0: self.proj_cool -= 1
 
-        # MELEE
+        # MELEE (punch / kick)
         if keys[self.melee_key] and self.attack_cool == 0 and not self.blocking:
-            self.attack_cool = self.melee_cooldown
-            self.state = "attack"
-
-            if self.rect.colliderect(opponent.rect):
-                attack_dir = -1 if self.facing_left else 1
-                opponent.take_hit(self.melee_damage, attack_dir)
+            if (
+                self.character_key == "player3"
+                and self.crouching
+                and self.kick_damage is not None
+            ):
+                self._perform_melee(self.kick_damage, self.kick_cooldown or self.melee_cooldown, opponent)
+            else:
+                self._perform_melee(self.melee_damage, self.melee_cooldown, opponent)
 
         # PROJECTILE
         elif keys[self.proj_key] and self.attack_cool == 0 and self.proj_cool == 0 and not self.blocking:
@@ -737,7 +754,16 @@ class Fighter:
             return None
 
         direction = -1 if self.facing_left else 1
-        return self.projectile_factory(self, direction, self.just_shot_power)
+        projectile = self.projectile_factory(self, direction, self.just_shot_power)
+
+        # ``just_shot`` stays True until we explicitly clear it, which caused a
+        # new projectile to spawn every frame after releasing the attack button.
+        # Reset the flags as soon as the projectile is built so a single release
+        # produces a single projectile as intended.
+        self.just_shot = False
+        self.just_shot_power = 1.0
+
+        return projectile
 
         # ANIMATION
         if self.state == "idle":
@@ -818,8 +844,10 @@ def create_players(p1_choice="player1", p2_choice="player2"):
 
         # Player 3 specializes in aggressive kicks and a custom kickwave projectile.
         return {
-            "melee_damage": 12,
-            "melee_cooldown": 15,
+            "melee_damage": 10,
+            "melee_cooldown": 13,
+            "kick_damage": 16,
+            "kick_cooldown": 22,
             "projectile_cooldown": 52,
             "projectile_attack_cooldown": 18,
             "projectile_factory": build_kickwave,
@@ -1125,6 +1153,16 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key, aggression
         if random.random() < MELEE:
             pressed.add(fighter.melee_key)
 
+    # PLAYER 3 KICK VARIANT (crouch + attack)
+    if (
+        fighter.character_key == "player3"
+        and fighter.attack_cool == 0
+        and fighter.crouch_key is not None
+        and in_melee
+    ):
+        if random.random() < 0.35:
+            pressed.add(fighter.crouch_key)
+            pressed.add(fighter.melee_key)
     # ----------------------------------------
     # PROJECTILES
     # ----------------------------------------
@@ -1838,9 +1876,9 @@ def play_round(p1, p2, p1_ai=False, p2_ai=False, round_score=None, target_wins=N
             p.update()
 
             hit_target = None
-            if p.rect.colliderect(p1.rect):
+            if p.rect.colliderect(p1.rect) and getattr(p, "owner", None) is not p1:
                 hit_target = p1
-            elif p.rect.colliderect(p2.rect):
+            elif p.rect.colliderect(p2.rect) and getattr(p, "owner", None) is not p2:
                 hit_target = p2
 
             if hit_target:
