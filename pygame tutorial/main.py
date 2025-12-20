@@ -260,17 +260,6 @@ class Pencil:
         tip = pygame.Rect(self.rect.right - 3, self.rect.y, 3, 4)
         pygame.draw.rect(surf, (120, 80, 20), tip)
 
-
-    def update(self):
-        self.rect.x += self.speed
-        if self.rect.right < 0 or self.rect.left > WIDTH:
-            self.active = False
-
-    def draw(self, surf):
-        pygame.draw.rect(surf, YELLOW, self.rect)
-        tip = pygame.Rect(self.rect.right - 3, self.rect.y, 3, 4)
-        pygame.draw.rect(surf, (120, 80, 20), tip)
-
 class Bottle:
     def __init__(self, x, y, direction, power=1.0):
 
