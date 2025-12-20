@@ -1069,6 +1069,21 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key, aggression
         ANTI_AIR = 0.92
         FAKEOUT = 0.01
 
+    SPACING_LO = 80
+    SPACING_HI = 170
+
+    # Character-specific tuning to keep the mirror match AI from feeling lopsided.
+    # Player 2 has a faster projectile and snappier melee cooldowns, so bias the
+    # bot toward maintaining pressure and peppering in more throws to leverage
+    # those advantages when controlled by the AI.
+    if fighter.character_key == "player2":
+        MELEE_BASE = min(1.0, MELEE_BASE + 0.08)
+        COMBO_BASE = min(1.0, COMBO_BASE + 0.06)
+        THROW_BASE = min(1.0, THROW_BASE + 0.10)
+        SHUFFLE += 0.04
+        SPACING_LO = 70
+        SPACING_HI = 150
+
     # ----------------------------------------
     # AGGRESSION SCALING
     # ----------------------------------------
@@ -1081,12 +1096,6 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key, aggression
     THROW = min(1.0, THROW_BASE * aggression + max(0, -health_delta) * 0.002)
     DODGE = min(1.0, DODGE_BASE * aggression)
 
-    SPACING_LO = 80
-    SPACING_HI = 170
-
-    # ----------------------------------------
-    # PROJECTILE DODGE
-    # ----------------------------------------
     danger_left = danger_right = danger_jump = False
 
     for proj in global_projectiles:
@@ -1216,7 +1225,7 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key, aggression
     # so spacing logic does not force constant left/right walking at the edges.
     # Preserve forward pressure when chasing an opponent in the corner so the
     # bot doesn't give up just before reaching melee range.
-    if fighter.rect.left <= 0 and moving_right:
+    if fighter.rect.left <= 0 and not moving_right:
         pressed.discard(left_key)
     if fighter.rect.right >= WIDTH and not moving_right:
         pressed.discard(right_key)
@@ -1293,6 +1302,14 @@ def build_ai_inputs(fighter, opponent, left_key, right_key, jump_key, aggression
 
         if CORNER_TRAP and opp_cornered and 130 < distance < 260:
             if random.random() < THROW * 0.8:
+                pressed.add(fighter.proj_key)
+
+        # Player 2's pencil cooldown is short; when piloted by the AI, keep
+        # mid-range pressure up so human opponents can't idle on the far side of
+        # the screen waiting for melee. This layer only applies when the AI is
+        # actually controlling Player 2 to avoid skewing the other characters.
+        if fighter.character_key == "player2" and 120 < distance < 210 and not opp_cornered:
+            if random.random() < THROW * 0.75:
                 pressed.add(fighter.proj_key)
 
     # ----------------------------------------------------------
