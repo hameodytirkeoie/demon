@@ -25,7 +25,6 @@ SPRITE_W, SPRITE_H = 50, 80
 GROUND_Y = HEIGHT - 40
 AI_COMFORT_DISTANCE = 140  # pixels of spacing the bot tries to maintain
 
-
 class GameSettings:
     def __init__(self):
         # How many rounds to win a match
