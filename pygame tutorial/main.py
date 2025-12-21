@@ -608,6 +608,20 @@ class Fighter:
         self.hit_frames, self.hit_frames_flipped = load_frames(hit)
         self.win_frames, self.win_frames_flipped = load_frames(win)
 
+        def build_crouch_frames(idle_frames):
+            crouch_frames = []
+            scale = 0.7
+
+            for frame in idle_frames:
+                w, h = frame.get_size()
+                scaled_h = max(15, int(round(h * scale)))
+                crouch_frames.append(pygame.transform.smoothscale(frame, (w, scaled_h)))
+
+            flipped = [pygame.transform.flip(img, True, False) for img in crouch_frames]
+            return crouch_frames, flipped
+
+        self.crouch_frames, self.crouch_frames_flipped = build_crouch_frames(self.idle_frames)
+
         # Animation state
         self.state = "idle"
         self.frame = 0
@@ -805,27 +819,19 @@ class Fighter:
 
         # ANIMATION
         if self.state == "idle":
-            self.animate(self.idle_frames, self.idle_frames_flipped, self.idle_speed)
+            self.animate(self.idle_frames, self.idle_frames_flipped, self.idle_speed, adjust_hitbox=True)
         elif self.state == "walk":
-            self.animate(self.walk_frames, self.walk_frames_flipped, 11)
+            self.animate(self.walk_frames, self.walk_frames_flipped, 11, adjust_hitbox=True)
         elif self.state == "run":
-            self.animate(self.run_frames, self.run_frames_flipped, 7)
+            self.animate(self.run_frames, self.run_frames_flipped, 7, adjust_hitbox=True)
         elif self.state == "attack":
-            self.animate(self.attack_frames, self.attack_frames_flipped, 9)
+            self.animate(self.attack_frames, self.attack_frames_flipped, 9, adjust_hitbox=True)
         elif self.blocking:
             self.state = "block"
-            self.image = (
-                self.idle_frames_flipped[0]
-                if self.facing_left
-                else self.idle_frames[0]
-            )
+            self.animate(self.idle_frames, self.idle_frames_flipped, self.idle_speed, adjust_hitbox=True)
         elif self.crouching:
             self.state = "crouch"
-            self.image = (
-                self.idle_frames_flipped[0]
-                if self.facing_left
-                else self.idle_frames[0]
-            )
+            self.animate(self.crouch_frames, self.crouch_frames_flipped, self.idle_speed, adjust_hitbox=True)
         else:
             self.state = "walk" if moving else "idle"
 
@@ -848,7 +854,7 @@ class Fighter:
     # ----------------------------------------------------------
     # ANIMATION HANDLER (ONLY ONE!)
     # ----------------------------------------------------------
-    def animate(self, frames, frames_flipped, speed):
+    def animate(self, frames, frames_flipped, speed, adjust_hitbox=False):
         frame_list = frames_flipped if self.facing_left else frames
 
         scaled_speed = max(1, int(round(speed * self.animation_speed_scale)))
@@ -864,6 +870,11 @@ class Fighter:
                 self.state = "idle"
 
         self.image = frame_list[self.frame]
+
+        if adjust_hitbox:
+            prev_midbottom = self.rect.midbottom
+            self.rect = self.image.get_rect()
+            self.rect.midbottom = prev_midbottom
 
     # ----------------------------------------------------------
     # DRAW (ONLY ONE!)
